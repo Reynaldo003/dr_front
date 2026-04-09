@@ -1,0 +1,176 @@
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+/* ===== BOTÓN NEON (estilo que pediste) ===== */
+.btn-neon {
+  width: 10em;
+  position: relative;
+  height: 3.5em;
+  border: 3px ridge #149CEA;
+  outline: none;
+  background-color: transparent;
+  color: white;
+  transition: 1s;
+  border-radius: 0.3em;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.btn-neon::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: 3%;
+  width: 95%;
+  height: 40%;
+  background-color: #212121;
+  transition: 0.5s;
+  transform-origin: center;
+}
+
+.btn-neon::before {
+  content: "";
+  transform-origin: center;
+  position: absolute;
+  top: 80%;
+  left: 3%;
+  width: 95%;
+  height: 40%;
+  background-color: #212121;
+  transition: 0.5s;
+}
+
+.btn-neon:hover::before,
+.btn-neon:hover::after {
+  transform: scale(0);
+}
+
+.btn-neon:hover {
+  box-shadow: inset 0px 0px 25px #1479EA;
+}
+
+/* 🔥 CLAVE: evita que ::before/::after tapen el texto */
+.btn-neon {
+  z-index: 0;
+}
+.btn-neon::before,
+.btn-neon::after {
+  z-index: -1;
+}
+
+/* Fix layout global: no encierres toda la app */
+#root {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: initial;
+}
+
+/* Evita márgenes default del navegador */
+html, body {
+  margin: 0;
+  padding: 0;
+}
+/* ===== BOTÓN NEON NARANJA (exacto al que pediste) ===== */
+.btn-neon-orange {
+  width: 10em;
+  position: relative;
+  height: 3.5em;
+  border: 3px ridge #ea7414;
+  outline: none;
+  background-color: transparent;
+  color: white;
+  transition: 1s;
+  border-radius: 0.3em;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.btn-neon-orange::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: 3%;
+  width: 95%;
+  height: 40%;
+  background-color: #212121;
+  transition: 0.5s;
+  transform-origin: center;
+}
+
+.btn-neon-orange::before {
+  content: "";
+  transform-origin: center;
+  position: absolute;
+  top: 80%;
+  left: 3%;
+  width: 95%;
+  height: 40%;
+  background-color: #212121;
+  transition: 0.5s;
+}
+
+.btn-neon-orange:hover::before,
+.btn-neon-orange:hover::after {
+  transform: scale(0);
+}
+
+.btn-neon-orange:hover {
+  box-shadow: inset 0px 0px 25px #ea9414;
+}
+
+.btn-neon-orange:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+/* 🔥 Importante: que el texto quede arriba de ::before/::after */
+.btn-neon-orange {
+  z-index: 0;
+}
+.btn-neon-orange::before,
+.btn-neon-orange::after {
+  z-index: -1;
+}
