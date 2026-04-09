@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+Disallow: /admin/
+Disallow: /api/
+Disallow: /media/
+Disallow: /static/
+
+Sitemap: https://misdosreynas.com/sitemap.xml

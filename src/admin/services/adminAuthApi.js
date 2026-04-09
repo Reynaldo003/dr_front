@@ -1,5 +1,5 @@
 const API_BASE = (
-  import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api"
+  import.meta.env.VITE_API_URL || "/api"
 ).replace(/\/+$/, "");
 
 const ADMIN_STORAGE_KEY = "admin_session";
