@@ -6,6 +6,7 @@ import ProductViewModal from "../components/products/ProductViewModal";
 import ProductEditModal from "../components/products/ProductEditModal";
 import { Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import {
+  obtenerProducto,
   obtenerProductos,
   crearProducto,
   actualizarProducto,
@@ -65,6 +66,12 @@ function toUiProduct(p) {
       sizes,
       stockMap,
       totalStock: Number(p.stock_total || 0),
+      totalColors: Number(
+        p.total_colores !== undefined ? p.total_colores : colors.length
+      ),
+      totalSizes: Number(
+        p.total_tallas !== undefined ? p.total_tallas : sizes.length
+      ),
     },
   };
 }
@@ -114,6 +121,7 @@ export default function Productos() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const [cargandoDetalle, setCargandoDetalle] = useState(false);
   const [error, setError] = useState("");
 
   const [openNew, setOpenNew] = useState(false);
@@ -152,14 +160,34 @@ export default function Productos() {
     });
   }, [products, q]);
 
-  function handleOpenView(p) {
-    setSelected(p);
-    setOpenView(true);
+  async function handleOpenView(p) {
+    try {
+      setCargandoDetalle(true);
+      const data = await obtenerProducto(p.apiId);
+      const productoUi = toUiProduct(data);
+      setSelected(productoUi);
+      setOpenView(true);
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "No se pudo cargar el detalle del producto.");
+    } finally {
+      setCargandoDetalle(false);
+    }
   }
 
-  function handleOpenEdit(p) {
-    setSelected(p);
-    setOpenEdit(true);
+  async function handleOpenEdit(p) {
+    try {
+      setCargandoDetalle(true);
+      const data = await obtenerProducto(p.apiId);
+      const productoUi = toUiProduct(data);
+      setSelected(productoUi);
+      setOpenEdit(true);
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "No se pudo cargar el detalle del producto.");
+    } finally {
+      setCargandoDetalle(false);
+    }
   }
 
   async function handleCreate(payload) {
@@ -198,7 +226,7 @@ export default function Productos() {
       setOpenNew(false);
     } catch (err) {
       console.error(err);
-      alert("No se pudo guardar el producto. Revisa SKU y datos de rebaja.");
+      alert(err.message || "No se pudo guardar el producto. Revisa SKU y datos de rebaja.");
     } finally {
       setGuardando(false);
     }
@@ -223,7 +251,7 @@ export default function Productos() {
       setOpenEdit(false);
     } catch (err) {
       console.error(err);
-      alert("No se pudo actualizar el producto.");
+      alert(err.message || "No se pudo actualizar el producto.");
     } finally {
       setGuardando(false);
     }
@@ -328,6 +356,7 @@ export default function Productos() {
                                 src={p.heroUrl}
                                 alt={p.title}
                                 className="h-full w-full object-cover"
+                                loading="lazy"
                               />
                             ) : (
                               <div className="h-full w-full grid place-items-center text-[10px] text-zinc-500">
@@ -342,8 +371,8 @@ export default function Productos() {
                               SKU: {p.sku}
                             </div>
                             <div className="text-[11px] text-zinc-500 truncate">
-                              {p.variants?.colors?.length || 0} colores ·{" "}
-                              {p.variants?.sizes?.length || 0} tallas
+                              {p.variants?.totalColors ?? 0} colores ·{" "}
+                              {p.variants?.totalSizes ?? 0} tallas
                             </div>
                           </div>
                         </div>
@@ -421,6 +450,7 @@ export default function Productos() {
                           src={p.heroUrl}
                           alt={p.title}
                           className="h-full w-full object-cover"
+                          loading="lazy"
                         />
                       ) : (
                         <div className="h-full w-full grid place-items-center text-xs text-zinc-500">
@@ -437,8 +467,8 @@ export default function Productos() {
                             {p.id} · SKU: {p.sku}
                           </div>
                           <div className="text-[11px] text-zinc-500 truncate mt-1">
-                            {p.variants?.colors?.length || 0} colores ·{" "}
-                            {p.variants?.sizes?.length || 0} tallas
+                            {p.variants?.totalColors ?? 0} colores ·{" "}
+                            {p.variants?.totalSizes ?? 0} tallas
                           </div>
                         </div>
                         {statusBadge(p.status)}
@@ -499,7 +529,10 @@ export default function Productos() {
 
         <div className="mt-4 text-xs text-zinc-500 flex items-center justify-between gap-2">
           <div>Total: {filtered.length} productos</div>
-          {guardando ? <div>Guardando cambios...</div> : null}
+          <div className="flex items-center gap-3">
+            {cargandoDetalle ? <div>Cargando detalle...</div> : null}
+            {guardando ? <div>Guardando cambios...</div> : null}
+          </div>
         </div>
       </Card>
 

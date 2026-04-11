@@ -27,7 +27,7 @@ const TIPOS_ENVIO = [
     costo: 250,
   },
   {
-    id: "DIA_SIGUIENTE",
+    id: "SIGUIENTE",
     nombre: "Envío día siguiente nacional",
     tiempo: "24 a 48 horas hábiles",
     costo: 399,

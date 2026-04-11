@@ -51,6 +51,10 @@ export function obtenerProductos({ buscar = "", tipo = "" } = {}) {
   return request(`/api/productos/${query ? `?${query}` : ""}`);
 }
 
+export function obtenerProducto(id) {
+  return request(`/api/productos/${id}/`);
+}
+
 export function crearProducto(payload) {
   return request("/api/productos/", {
     method: "POST",

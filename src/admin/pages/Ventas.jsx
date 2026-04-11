@@ -1,615 +1,643 @@
-import { useEffect, useMemo, useState } from "react";
-import Card from "../components/ui/Card";
-import Badge from "../components/ui/Badge";
-import Sheet from "../components/ui/Sheet";
-import Modal from "../components/ui/Modal";
-import NewSaleModal from "../components/sales/NewSaleModal";
-import {
-  Plus,
-  Search,
-  Filter,
-  Pencil,
-  Trash2,
-  CreditCard,
-  Mail,
-  Phone,
-  MapPin,
-} from "lucide-react";
-import { obtenerProductos } from "../services/productosApi";
-import {
-  obtenerVentas,
-  crearVenta,
-  actualizarVenta,
-  eliminarVenta,
-  crearPreferenciaMercadoPago,
-} from "../services/ventasApi";
+import { useMemo, useState, useEffect } from "react";
+import Modal from "../ui/Modal";
+import Badge from "../ui/Badge";
+import { Plus, Trash2 } from "lucide-react";
 
-function estadoBadge(estado) {
-  if (estado === "PAGADA") return <Badge variant="success">Pagada</Badge>;
-  if (estado === "PENDIENTE") return <Badge variant="warning">Pendiente</Badge>;
-  if (estado === "REEMBOLSADA") return <Badge variant="neutral">Reembolsada</Badge>;
-  return <Badge variant="danger">Cancelada</Badge>;
+function isoToday() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function money(n) {
   return `$${Number(n || 0).toLocaleString()}`;
 }
 
-function SaleViewModal({ open, onClose, sale }) {
-  if (!sale) return null;
+function StockAlert({ msg }) {
+  if (!msg) return null;
+
+  return (
+    <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+      {msg}
+    </div>
+  );
+}
+
+function normalizarTexto(valor) {
+  return String(valor || "").trim().toLowerCase();
+}
+
+export default function NewSaleModal({
+  open,
+  onClose,
+  productos = [],
+  mode = "create",
+  initialSale = null,
+  onCreate,
+  onUpdate,
+  getStockFor,
+}) {
+  const isEdit = mode === "edit";
+
+  const productMap = useMemo(() => {
+    const mapa = new Map();
+    (productos || []).forEach((p) => mapa.set(String(p.id), p));
+    return mapa;
+  }, [productos]);
+
+  function getVariantesProducto(productId) {
+    const producto = productMap.get(String(productId));
+    return Array.isArray(producto?.variantes) ? producto.variantes : [];
+  }
+
+  function getFirstProductId() {
+    return productos?.[0]?.id ? String(productos[0].id) : "";
+  }
+
+  function getFirstVariant(productId) {
+    const variantes = getVariantesProducto(productId);
+    const primera = variantes[0];
+
+    return {
+      color: primera?.color || "",
+      talla: primera?.talla || "",
+    };
+  }
+
+  function getDefaultItem() {
+    const productId = getFirstProductId();
+    const firstVariant = getFirstVariant(productId);
+
+    return {
+      productId,
+      color: firstVariant.color,
+      talla: firstVariant.talla,
+      qty: 1,
+    };
+  }
+
+  function getColoresProducto(productId) {
+    const variantes = getVariantesProducto(productId);
+    return [...new Set(variantes.map((v) => v.color).filter(Boolean))];
+  }
+
+  function getTallasProducto(productId, color) {
+    const variantes = getVariantesProducto(productId);
+    const colorNormalizado = normalizarTexto(color);
+
+    return [
+      ...new Set(
+        variantes
+          .filter((v) => normalizarTexto(v.color) === colorNormalizado)
+          .map((v) => v.talla)
+          .filter(Boolean),
+      ),
+    ];
+  }
+
+  function getStockVariante(productId, color, talla) {
+    if (!productId || !color || !talla) return 0;
+
+    if (typeof getStockFor === "function") {
+      return Number(getStockFor(productId, color, talla) || 0);
+    }
+
+    const variantes = getVariantesProducto(productId);
+    const encontrada = variantes.find(
+      (v) =>
+        normalizarTexto(v.color) === normalizarTexto(color) &&
+        normalizarTexto(v.talla) === normalizarTexto(talla),
+    );
+
+    return Number(encontrada?.stock || 0);
+  }
+
+  const [cliente, setCliente] = useState("");
+  const [clienteEmail, setClienteEmail] = useState("");
+  const [clienteTelefono, setClienteTelefono] = useState("");
+
+  const [direccionLinea1, setDireccionLinea1] = useState("");
+  const [direccionLinea2, setDireccionLinea2] = useState("");
+  const [ciudad, setCiudad] = useState("");
+  const [estadoDireccion, setEstadoDireccion] = useState("");
+  const [codigoPostal, setCodigoPostal] = useState("");
+  const [referenciasEnvio, setReferenciasEnvio] = useState("");
+
+  const [fecha, setFecha] = useState(isoToday());
+  const [metodoPago, setMetodoPago] = useState("MERCADO_PAGO");
+  const [estado, setEstado] = useState("PENDIENTE");
+  const [items, setItems] = useState([getDefaultItem()]);
+
+  const mustValidateStock = estado === "PAGADA";
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (isEdit && initialSale) {
+      setCliente(initialSale.cliente || "");
+      setClienteEmail(initialSale.cliente_email || "");
+      setClienteTelefono(initialSale.cliente_telefono || "");
+
+      setDireccionLinea1(initialSale.direccion_linea1 || "");
+      setDireccionLinea2(initialSale.direccion_linea2 || "");
+      setCiudad(initialSale.ciudad || "");
+      setEstadoDireccion(initialSale.estado_direccion || "");
+      setCodigoPostal(initialSale.codigo_postal || "");
+      setReferenciasEnvio(initialSale.referencias_envio || "");
+
+      setFecha(initialSale.fecha_venta || isoToday());
+      setMetodoPago(initialSale.metodo_pago || "MERCADO_PAGO");
+      setEstado(initialSale.estado || "PENDIENTE");
+
+      const safeItems =
+        Array.isArray(initialSale.detalles) && initialSale.detalles.length > 0
+          ? initialSale.detalles.map((it) => ({
+            productId: String(it.producto?.id || it.producto_id || ""),
+            color: it.color || "",
+            talla: it.talla || "",
+            qty: Number(it.cantidad || 1),
+          }))
+          : [getDefaultItem()];
+
+      setItems(safeItems);
+    } else {
+      setCliente("");
+      setClienteEmail("");
+      setClienteTelefono("");
+      setDireccionLinea1("");
+      setDireccionLinea2("");
+      setCiudad("");
+      setEstadoDireccion("");
+      setCodigoPostal("");
+      setReferenciasEnvio("");
+      setFecha(isoToday());
+      setMetodoPago("MERCADO_PAGO");
+      setEstado("PENDIENTE");
+      setItems([getDefaultItem()]);
+    }
+  }, [open, isEdit, initialSale, productos]);
+
+  const total = useMemo(() => {
+    return items.reduce((acc, it) => {
+      const p = productMap.get(String(it.productId));
+      const price = Number(p?.precio || 0);
+      return acc + price * (Number(it.qty) || 0);
+    }, 0);
+  }, [items, productMap]);
+
+  const addItem = () => {
+    setItems((prev) => [...prev, getDefaultItem()]);
+  };
+
+  const removeItem = (idx) => {
+    setItems((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateItem = (idx, patch) => {
+    setItems((prev) =>
+      prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)),
+    );
+  };
+
+  const handleProductChange = (idx, productId) => {
+    const firstVariant = getFirstVariant(productId);
+
+    updateItem(idx, {
+      productId,
+      color: firstVariant.color,
+      talla: firstVariant.talla,
+      qty: 1,
+    });
+  };
+
+  const handleColorChange = (idx, productId, color) => {
+    const tallas = getTallasProducto(productId, color);
+    const talla = tallas[0] || "";
+
+    updateItem(idx, {
+      color,
+      talla,
+    });
+  };
+
+  const stockIssues = useMemo(() => {
+    if (!mustValidateStock) return [];
+
+    const issues = [];
+    const counts = new Map();
+
+    for (const it of items) {
+      const pid = String(it.productId || "");
+      const color = String(it.color || "");
+      const talla = String(it.talla || "");
+      const qty = Number(it.qty || 0);
+
+      if (!pid || qty <= 0) continue;
+
+      if (!color || !talla) {
+        const p = productMap.get(pid);
+        issues.push(`Debes seleccionar color y talla para "${p?.titulo || pid}".`);
+        continue;
+      }
+
+      const key = `${pid}__${normalizarTexto(color)}__${normalizarTexto(talla)}`;
+      counts.set(key, {
+        productId: pid,
+        color,
+        talla,
+        qty: (counts.get(key)?.qty || 0) + qty,
+      });
+    }
+
+    for (const item of counts.values()) {
+      const p = productMap.get(String(item.productId));
+      const disponible = getStockVariante(
+        item.productId,
+        item.color,
+        item.talla,
+      );
+
+      if (disponible <= 0) {
+        issues.push(
+          `"${p?.titulo || item.productId}" / ${item.color} / ${item.talla} está sin stock.`,
+        );
+        continue;
+      }
+
+      if (item.qty > disponible) {
+        issues.push(
+          `Stock insuficiente para "${p?.titulo || item.productId}" / ${item.color} / ${item.talla}. Solo quedan ${disponible}.`,
+        );
+      }
+    }
+
+    return issues;
+  }, [items, productMap, getStockFor, mustValidateStock]);
+
+  const canSave =
+    cliente.trim().length >= 2 &&
+    items.length > 0 &&
+    total > 0 &&
+    stockIssues.length === 0 &&
+    items.every(
+      (it) =>
+        it.productId &&
+        String(it.color || "").trim() &&
+        String(it.talla || "").trim() &&
+        Number(it.qty) > 0,
+    );
+
+  const handleSave = () => {
+    if (!canSave) return;
+
+    const payload = {
+      cliente: cliente.trim(),
+      cliente_email: clienteEmail.trim(),
+      cliente_telefono: clienteTelefono.trim(),
+      direccion_linea1: direccionLinea1.trim(),
+      direccion_linea2: direccionLinea2.trim(),
+      ciudad: ciudad.trim(),
+      estado_direccion: estadoDireccion.trim(),
+      codigo_postal: codigoPostal.trim(),
+      referencias_envio: referenciasEnvio.trim(),
+      fecha_venta: fecha,
+      estado,
+      metodo_pago: metodoPago,
+      detalles: items.map((it) => ({
+        producto_id: Number(it.productId),
+        color: String(it.color || "").trim(),
+        talla: String(it.talla || "").trim(),
+        cantidad: Number(it.qty) || 0,
+      })),
+    };
+
+    if (isEdit && initialSale?.id) {
+      onUpdate?.(initialSale.id, payload);
+      return;
+    }
+
+    onCreate?.(payload);
+  };
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={`Venta ${sale.folio}`}
-      subtitle="Detalle real"
+      title={isEdit ? `Editar venta ${initialSale?.folio || ""}` : "Nueva venta"}
+      subtitle="Venta conectada al backend"
       footer={
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm">
             <span className="text-zinc-500">Total:</span>{" "}
-            <span className="font-semibold">{money(sale.total)}</span>
+            <span className="font-semibold">{money(total)}</span>
           </div>
 
-          <button
-            onClick={onClose}
-            className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
-          >
-            Cerrar
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="rounded-xl border px-4 py-2 text-sm hover:bg-white active:scale-[0.98] transition"
+            >
+              Cancelar
+            </button>
+
+            <button
+              onClick={handleSave}
+              disabled={!canSave}
+              className={[
+                "rounded-xl px-4 py-2 text-sm transition",
+                canSave
+                  ? "bg-zinc-900 text-white hover:opacity-95 active:scale-[0.98]"
+                  : "bg-zinc-300 text-zinc-600 cursor-not-allowed",
+              ].join(" ")}
+            >
+              {isEdit ? "Guardar cambios" : "Guardar venta"}
+            </button>
+          </div>
         </div>
       }
     >
-      <div className="grid gap-3 md:grid-cols-2 text-sm">
-        <div className="rounded-xl border p-3">
-          <div className="text-xs text-zinc-500">Cliente</div>
-          <div className="font-medium">{sale.cliente || "-"}</div>
-        </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="block">
+          <span className="text-xs font-medium text-zinc-700">Cliente</span>
+          <input
+            value={cliente}
+            onChange={(e) => setCliente(e.target.value)}
+            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+            placeholder="Ej: Ana García"
+          />
+        </label>
 
-        <div className="rounded-xl border p-3">
-          <div className="text-xs text-zinc-500">Fecha</div>
-          <div className="font-medium">{sale.fecha_venta || "-"}</div>
-        </div>
+        <label className="block">
+          <span className="text-xs font-medium text-zinc-700">Correo</span>
+          <input
+            value={clienteEmail}
+            onChange={(e) => setClienteEmail(e.target.value)}
+            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+            placeholder="cliente@correo.com"
+          />
+        </label>
 
-        <div className="rounded-xl border p-3">
-          <div className="text-xs text-zinc-500">Método de pago</div>
-          <div className="font-medium">{sale.metodo_pago || "-"}</div>
-        </div>
+        <label className="block">
+          <span className="text-xs font-medium text-zinc-700">Teléfono</span>
+          <input
+            value={clienteTelefono}
+            onChange={(e) => setClienteTelefono(e.target.value)}
+            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+            placeholder="271..."
+          />
+        </label>
 
-        <div className="rounded-xl border p-3">
-          <div className="text-xs text-zinc-500">Estado</div>
-          <div className="mt-1">{estadoBadge(sale.estado)}</div>
-        </div>
-      </div>
+        <label className="block">
+          <span className="text-xs font-medium text-zinc-700">Fecha</span>
+          <input
+            type="date"
+            value={fecha}
+            onChange={(e) => setFecha(e.target.value)}
+            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+          />
+        </label>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2 text-sm">
-        <div className="rounded-xl border p-3">
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <Mail size={14} />
-            Correo
-          </div>
-          <div className="mt-1 font-medium break-all">
-            {sale.cliente_email || sale.cliente_usuario_resumen?.email || "-"}
-          </div>
-        </div>
+        <label className="block md:col-span-2">
+          <span className="text-xs font-medium text-zinc-700">Dirección</span>
+          <input
+            value={direccionLinea1}
+            onChange={(e) => setDireccionLinea1(e.target.value)}
+            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+            placeholder="Calle y número"
+          />
+        </label>
 
-        <div className="rounded-xl border p-3">
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <Phone size={14} />
-            Teléfono
-          </div>
-          <div className="mt-1 font-medium">
-            {sale.cliente_telefono || sale.cliente_usuario_resumen?.telefono || "-"}
-          </div>
-        </div>
+        <label className="block md:col-span-2">
+          <span className="text-xs font-medium text-zinc-700">Complemento dirección</span>
+          <input
+            value={direccionLinea2}
+            onChange={(e) => setDireccionLinea2(e.target.value)}
+            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+            placeholder="Interior, colonia, complemento"
+          />
+        </label>
 
-        <div className="rounded-xl border p-3 md:col-span-2">
-          <div className="flex items-center gap-2 text-xs text-zinc-500">
-            <MapPin size={14} />
-            Dirección
-          </div>
+        <label className="block">
+          <span className="text-xs font-medium text-zinc-700">Ciudad</span>
+          <input
+            value={ciudad}
+            onChange={(e) => setCiudad(e.target.value)}
+            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+          />
+        </label>
 
-          <div className="mt-1 font-medium">
-            {sale.direccion_linea1 || sale.cliente_direccion_resumen?.direccion_linea1 || "-"}
-          </div>
+        <label className="block">
+          <span className="text-xs font-medium text-zinc-700">Estado dirección</span>
+          <input
+            value={estadoDireccion}
+            onChange={(e) => setEstadoDireccion(e.target.value)}
+            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+          />
+        </label>
 
-          {sale.direccion_linea2 ? (
-            <div className="text-zinc-600">{sale.direccion_linea2}</div>
-          ) : null}
+        <label className="block">
+          <span className="text-xs font-medium text-zinc-700">Código postal</span>
+          <input
+            value={codigoPostal}
+            onChange={(e) => setCodigoPostal(e.target.value)}
+            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+          />
+        </label>
 
-          <div className="text-zinc-600">
-            {[sale.ciudad, sale.estado_direccion, sale.codigo_postal].filter(Boolean).join(", ") || "-"}
-          </div>
+        <label className="block">
+          <span className="text-xs font-medium text-zinc-700">Método de pago</span>
+          <select
+            value={metodoPago}
+            onChange={(e) => setMetodoPago(e.target.value)}
+            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+          >
+            <option value="MERCADO_PAGO">Mercado Pago</option>
+            <option value="EFECTIVO">Efectivo</option>
+            <option value="TRANSFERENCIA">Transferencia</option>
+            <option value="TARJETA">Tarjeta</option>
+          </select>
+        </label>
 
-          {sale.referencias_envio ? (
-            <div className="text-xs text-zinc-500 mt-2">
-              Referencias: {sale.referencias_envio}
+        <label className="block md:col-span-2">
+          <span className="text-xs font-medium text-zinc-700">Referencias envío</span>
+          <textarea
+            value={referenciasEnvio}
+            onChange={(e) => setReferenciasEnvio(e.target.value)}
+            rows={3}
+            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-xs font-medium text-zinc-700">Estado</span>
+          <select
+            value={estado}
+            onChange={(e) => setEstado(e.target.value)}
+            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+          >
+            <option value="PENDIENTE">Pendiente</option>
+            <option value="PAGADA">Pagada</option>
+            <option value="CANCELADA">Cancelada</option>
+            <option value="REEMBOLSADA">Reembolsada</option>
+          </select>
+
+          {!mustValidateStock && (
+            <div className="mt-2 text-[11px] text-zinc-500">
+              Este estado no descuenta inventario.
             </div>
-          ) : null}
-        </div>
+          )}
+        </label>
       </div>
 
-      <div className="mt-4">
-        <div className="text-sm font-semibold">Productos</div>
+      <div className="mt-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold">Productos</div>
+            <div className="text-xs text-zinc-500">
+              {mustValidateStock
+                ? "Valida stock disponible por variante"
+                : "No descuenta stock todavía"}
+            </div>
+          </div>
 
-        <div className="mt-2 space-y-2">
-          {(sale.detalles || []).map((it, idx) => {
-            const qty = Number(it.cantidad || 0);
-            const price = Number(it.precio_unitario || 0);
+          <button
+            onClick={addItem}
+            type="button"
+            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50 active:scale-[0.98] transition"
+          >
+            <Plus size={16} />
+            Agregar
+          </button>
+        </div>
+
+        {stockIssues.length > 0 && (
+          <div className="mt-3">
+            {stockIssues.map((m, i) => (
+              <StockAlert key={i} msg={m} />
+            ))}
+          </div>
+        )}
+
+        <div className="mt-3 space-y-3">
+          {items.map((it, idx) => {
+            const p = productMap.get(String(it.productId));
+            const price = Number(p?.precio || 0);
+            const subtotal = price * (Number(it.qty) || 0);
+
+            const colores = getColoresProducto(it.productId);
+            const tallas = getTallasProducto(it.productId, it.color);
+            const stockVariante = getStockVariante(
+              it.productId,
+              it.color,
+              it.talla,
+            );
 
             return (
-              <div
-                key={idx}
-                className="rounded-xl border p-3 flex items-center justify-between"
-              >
-                <div className="min-w-0">
-                  <div className="font-medium truncate">
-                    {it.producto?.titulo || "-"}
+              <div key={idx} className="rounded-2xl border p-3">
+                <div className="grid gap-3 md:grid-cols-12 items-end">
+                  <label className="block md:col-span-4">
+                    <span className="text-xs font-medium text-zinc-700">Producto</span>
+                    <select
+                      value={it.productId}
+                      onChange={(e) => handleProductChange(idx, e.target.value)}
+                      className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+                    >
+                      {(productos || []).map((producto) => (
+                        <option key={producto.id} value={String(producto.id)}>
+                          {producto.titulo} · {money(producto.precio)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block md:col-span-2">
+                    <span className="text-xs font-medium text-zinc-700">Color</span>
+                    <select
+                      value={it.color}
+                      onChange={(e) =>
+                        handleColorChange(idx, it.productId, e.target.value)
+                      }
+                      className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+                    >
+                      {colores.length > 0 ? (
+                        colores.map((color) => (
+                          <option key={color} value={color}>
+                            {color}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">Sin variantes</option>
+                      )}
+                    </select>
+                  </label>
+
+                  <label className="block md:col-span-2">
+                    <span className="text-xs font-medium text-zinc-700">Talla</span>
+                    <select
+                      value={it.talla}
+                      onChange={(e) => updateItem(idx, { talla: e.target.value })}
+                      className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+                    >
+                      {tallas.length > 0 ? (
+                        tallas.map((talla) => (
+                          <option key={talla} value={talla}>
+                            {talla}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">Sin tallas</option>
+                      )}
+                    </select>
+                  </label>
+
+                  <label className="block md:col-span-2">
+                    <span className="text-xs font-medium text-zinc-700">Cantidad</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={it.qty}
+                      onChange={(e) =>
+                        updateItem(idx, { qty: Number(e.target.value) })
+                      }
+                      className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+                    />
+                    <div className="mt-2 text-[11px] text-zinc-500">
+                      Stock variante:{" "}
+                      <span className="font-medium">{stockVariante}</span>
+                    </div>
+                  </label>
+
+                  <div className="md:col-span-1">
+                    <div className="text-xs text-zinc-500">Subtotal</div>
+                    <div className="mt-2 font-semibold">{money(subtotal)}</div>
                   </div>
-                  <div className="text-xs text-zinc-500">
-                    {qty} × {money(price)}
-                    {it.color ? ` · ${it.color}` : ""}
-                    {it.talla ? ` · Talla ${it.talla}` : ""}
+
+                  <div className="md:col-span-1 flex justify-end">
+                    <button
+                      onClick={() => removeItem(idx)}
+                      type="button"
+                      className="rounded-xl border p-2 hover:bg-zinc-50 active:scale-[0.98] transition"
+                      title="Eliminar"
+                      disabled={items.length === 1}
+                    >
+                      <Trash2 size={16} className="text-zinc-700" />
+                    </button>
                   </div>
                 </div>
 
-                <div className="font-semibold">{money(it.subtotal)}</div>
+                <div className="mt-3 flex items-center gap-2 text-xs text-zinc-500 flex-wrap">
+                  <Badge variant="success">Precio</Badge>
+                  <span>{money(price)}</span>
+                  {it.color ? <span>· {it.color}</span> : null}
+                  {it.talla ? <span>· Talla {it.talla}</span> : null}
+                </div>
               </div>
             );
           })}
         </div>
       </div>
     </Modal>
-  );
-}
-
-export default function Ventas() {
-  const [products, setProducts] = useState([]);
-  const [sales, setSales] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const [q, setQ] = useState("");
-  const [estado, setEstado] = useState("TODOS");
-  const [openFilters, setOpenFilters] = useState(false);
-
-  const [openNew, setOpenNew] = useState(false);
-  const [openView, setOpenView] = useState(false);
-  const [openEdit, setOpenEdit] = useState(false);
-  const [selected, setSelected] = useState(null);
-
-  useEffect(() => {
-    cargarTodo();
-  }, []);
-
-  async function cargarTodo() {
-    try {
-      setLoading(true);
-      setError("");
-
-      const [productosData, ventasData] = await Promise.all([
-        obtenerProductos(),
-        obtenerVentas(),
-      ]);
-
-      setProducts(productosData || []);
-      setSales(ventasData || []);
-    } catch (err) {
-      console.error(err);
-      setError(err.message || "No se pudieron cargar las ventas.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase();
-
-    return (sales || []).filter((v) => {
-      const okQuery =
-        !query ||
-        String(v.folio || "").toLowerCase().includes(query) ||
-        String(v.cliente || "").toLowerCase().includes(query) ||
-        String(v.cliente_email || "").toLowerCase().includes(query) ||
-        String(v.cliente_telefono || "").toLowerCase().includes(query);
-
-      const okEstado = estado === "TODOS" ? true : v.estado === estado;
-      return okQuery && okEstado;
-    });
-  }, [sales, q, estado]);
-
-  const getStockForEdit = (sale, productId) => {
-    const p = (products || []).find((x) => String(x.id) === String(productId));
-    const base = Number(p?.stock_disponible || 0);
-
-    if (!sale) return base;
-
-    const extra = (sale.detalles || []).reduce((acc, it) => {
-      if (String(it.producto?.id || it.producto_id) !== String(productId)) {
-        return acc;
-      }
-
-      return acc + Number(it.cantidad || 0);
-    }, 0);
-
-    return base + extra;
-  };
-
-  async function refrescarProductos() {
-    const productosActualizados = await obtenerProductos();
-    setProducts(productosActualizados || []);
-  }
-
-  async function handleCreate(payload) {
-    try {
-      const creada = await crearVenta(payload);
-      setSales((prev) => [creada, ...prev]);
-      setOpenNew(false);
-
-      if (creada.metodo_pago === "MERCADO_PAGO" && creada.estado !== "PAGADA") {
-        const pref = await crearPreferenciaMercadoPago(creada.id);
-        const initPoint = pref.init_point || pref.sandbox_init_point;
-
-        if (initPoint) {
-          window.open(initPoint, "_blank", "noopener,noreferrer");
-        }
-      }
-
-      await refrescarProductos();
-    } catch (err) {
-      console.error(err);
-      alert(err.message || "No se pudo crear la venta.");
-    }
-  }
-
-  async function handleUpdate(saleId, payload) {
-    try {
-      const actualizada = await actualizarVenta(saleId, payload);
-
-      setSales((prev) =>
-        prev.map((item) => (item.id === actualizada.id ? actualizada : item))
-      );
-
-      await refrescarProductos();
-      setSelected(actualizada);
-      setOpenEdit(false);
-    } catch (err) {
-      console.error(err);
-      alert(err.message || "No se pudo actualizar la venta.");
-    }
-  }
-
-  async function handleDelete(saleId) {
-    const ok = window.confirm("¿Eliminar esta venta?");
-    if (!ok) return;
-
-    try {
-      await eliminarVenta(saleId);
-      setSales((prev) => prev.filter((item) => item.id !== saleId));
-      await refrescarProductos();
-    } catch (err) {
-      console.error(err);
-      alert(err.message || "No se pudo eliminar la venta.");
-    }
-  }
-
-  async function handleCobrar(ventaId) {
-    try {
-      const pref = await crearPreferenciaMercadoPago(ventaId);
-      const initPoint = pref.init_point || pref.sandbox_init_point;
-
-      if (initPoint) {
-        window.open(initPoint, "_blank", "noopener,noreferrer");
-      }
-    } catch (err) {
-      alert(err.message || "No se pudo abrir el checkout.");
-    }
-  }
-
-  return (
-    <div className="space-y-6 animate-fadeIn">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Ventas</h1>
-        </div>
-
-        <div className="hidden sm:flex items-center gap-2">
-          <div className="relative">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
-              size={18}
-            />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="w-72 rounded-xl border bg-white pl-10 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-              placeholder="Buscar por folio, cliente, correo o teléfono"
-            />
-          </div>
-
-          <select
-            value={estado}
-            onChange={(e) => setEstado(e.target.value)}
-            className="rounded-xl border bg-white px-3 py-2 text-sm"
-          >
-            <option value="TODOS">Todos</option>
-            <option value="PAGADA">Pagada</option>
-            <option value="PENDIENTE">Pendiente</option>
-            <option value="CANCELADA">Cancelada</option>
-            <option value="REEMBOLSADA">Reembolsada</option>
-          </select>
-
-          <button
-            onClick={() => setOpenNew(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 text-white px-4 py-2 text-sm hover:opacity-95"
-          >
-            <Plus size={16} /> Nueva venta
-          </button>
-        </div>
-
-        <div className="sm:hidden flex flex-col gap-2">
-          <div className="relative">
-            <Search
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
-              size={18}
-            />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="w-full rounded-xl border bg-white pl-10 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-              placeholder="Buscar venta"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setOpenFilters(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
-            >
-              <Filter size={16} /> Filtros
-            </button>
-
-            <button
-              onClick={() => setOpenNew(true)}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 text-white px-4 py-2 text-sm hover:opacity-95"
-            >
-              <Plus size={16} /> Nueva
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <Card title="Órdenes">
-        {loading ? (
-          <div className="rounded-2xl border bg-white p-6 text-sm text-zinc-600">
-            Cargando ventas...
-          </div>
-        ) : error ? (
-          <div className="rounded-2xl border bg-red-50 p-6 text-sm text-red-700">
-            {error}
-          </div>
-        ) : (
-          <>
-            <div className="hidden md:block overflow-auto rounded-2xl border">
-              <table className="min-w-full text-sm">
-                <thead className="bg-zinc-50">
-                  <tr>
-                    {["Folio", "Fecha", "Cliente", "Contacto", "Total", "Estado", "Acciones"].map(
-                      (h) => (
-                        <th
-                          key={h}
-                          className="text-left px-4 py-3 font-semibold text-zinc-700"
-                        >
-                          {h}
-                        </th>
-                      )
-                    )}
-                  </tr>
-                </thead>
-
-                <tbody className="bg-white">
-                  {filtered.map((v) => (
-                    <tr key={v.id} className="border-t hover:bg-zinc-50">
-                      <td className="px-4 py-3 font-medium">{v.folio}</td>
-                      <td className="px-4 py-3">{v.fecha_venta}</td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{v.cliente}</div>
-                        {(v.ciudad || v.estado_direccion) ? (
-                          <div className="text-xs text-zinc-500">
-                            {[v.ciudad, v.estado_direccion].filter(Boolean).join(", ")}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div>{v.cliente_email || "-"}</div>
-                        <div className="text-xs text-zinc-500">{v.cliente_telefono || "-"}</div>
-                      </td>
-                      <td className="px-4 py-3 font-medium">{money(v.total)}</td>
-                      <td className="px-4 py-3">{estadoBadge(v.estado)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-2 flex-wrap">
-                          <button
-                            onClick={() => {
-                              setSelected(v);
-                              setOpenView(true);
-                            }}
-                            className="rounded-lg border px-3 py-1 text-xs hover:bg-zinc-50"
-                          >
-                            Ver
-                          </button>
-
-                          <button
-                            onClick={() => {
-                              setSelected(v);
-                              setOpenEdit(true);
-                            }}
-                            className="inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-xs hover:bg-zinc-50"
-                          >
-                            <Pencil size={14} />
-                            Editar
-                          </button>
-
-                          {v.metodo_pago === "MERCADO_PAGO" &&
-                            v.estado === "PENDIENTE" && (
-                              <button
-                                onClick={() => handleCobrar(v.id)}
-                                className="inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-xs hover:bg-zinc-50"
-                              >
-                                <CreditCard size={14} />
-                                Cobrar
-                              </button>
-                            )}
-
-                          <button
-                            onClick={() => handleDelete(v.id)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 py-1 text-xs text-red-700 hover:opacity-90"
-                          >
-                            <Trash2 size={14} />
-                            Eliminar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-
-                  {filtered.length === 0 && (
-                    <tr>
-                      <td className="px-4 py-6 text-sm text-zinc-500" colSpan={7}>
-                        No hay ventas con ese filtro.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="md:hidden space-y-3">
-              {filtered.map((v) => (
-                <div key={v.id} className="rounded-2xl border bg-white p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="font-semibold">{v.folio}</div>
-                      <div className="text-xs text-zinc-500 truncate">
-                        {v.fecha_venta} · {v.cliente}
-                      </div>
-                      {v.cliente_email ? (
-                        <div className="text-xs text-zinc-500 truncate">{v.cliente_email}</div>
-                      ) : null}
-                    </div>
-
-                    {estadoBadge(v.estado)}
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-zinc-500">Total</div>
-                      <div className="text-lg font-semibold">{money(v.total)}</div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setSelected(v);
-                          setOpenView(true);
-                        }}
-                        className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
-                      >
-                        Ver
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setSelected(v);
-                          setOpenEdit(true);
-                        }}
-                        className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
-                      >
-                        Editar
-                      </button>
-                    </div>
-                  </div>
-
-                  {v.metodo_pago === "MERCADO_PAGO" && v.estado === "PENDIENTE" && (
-                    <button
-                      onClick={() => handleCobrar(v.id)}
-                      className="mt-3 w-full rounded-xl border py-2 text-sm hover:bg-zinc-50"
-                    >
-                      Cobrar con Mercado Pago
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => handleDelete(v.id)}
-                    className="mt-3 w-full rounded-xl border border-red-200 bg-red-50 py-2 text-sm text-red-700"
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              ))}
-
-              {filtered.length === 0 && (
-                <div className="rounded-2xl border bg-zinc-50 p-4 text-sm text-zinc-600">
-                  No hay ventas con ese filtro.
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </Card>
-
-      <Sheet
-        open={openFilters}
-        onClose={() => setOpenFilters(false)}
-        title="Filtros"
-        subtitle="Ajusta estado y aplica"
-        footer={
-          <button
-            onClick={() => setOpenFilters(false)}
-            className="w-full rounded-xl bg-zinc-900 text-white py-2 text-sm hover:opacity-95"
-          >
-            Aplicar
-          </button>
-        }
-      >
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700">Estado</span>
-          <select
-            value={estado}
-            onChange={(e) => setEstado(e.target.value)}
-            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm"
-          >
-            <option value="TODOS">Todos</option>
-            <option value="PAGADA">Pagada</option>
-            <option value="PENDIENTE">Pendiente</option>
-            <option value="CANCELADA">Cancelada</option>
-            <option value="REEMBOLSADA">Reembolsada</option>
-          </select>
-        </label>
-      </Sheet>
-
-      <NewSaleModal
-        open={openNew}
-        onClose={() => setOpenNew(false)}
-        productos={products}
-        mode="create"
-        onCreate={handleCreate}
-      />
-
-      <SaleViewModal
-        open={openView}
-        onClose={() => setOpenView(false)}
-        sale={selected}
-      />
-
-      <NewSaleModal
-        open={openEdit}
-        onClose={() => setOpenEdit(false)}
-        productos={products}
-        mode="edit"
-        initialSale={selected}
-        onUpdate={handleUpdate}
-        getStockFor={(pid) => getStockForEdit(selected, pid)}
-      />
-    </div>
   );
 }
