@@ -13,14 +13,14 @@ import {
 import { useAuth } from "../../auth/AuthContext";
 
 const links = [
-  { to: "/admin", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/admin/ventas", label: "Ventas", icon: ShoppingCart },
-  { to: "/admin/clientes", label: "Clientes", icon: Users },
-  { to: "/admin/productos", label: "Productos", icon: Package },
-  { to: "/admin/rebajas", label: "Rebajas", icon: BadgePercent },
-  { to: "/admin/new-arrivals", label: "New Arrivals", icon: Sparkles },
-  { to: "/admin/rendimiento", label: "Reportes", icon: FileText },
-  { to: "/admin/comentarios", label: "Comentarios", icon: MessageSquareText },
+  { to: "/administrativa", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/administrativa/ventas", label: "Ventas", icon: ShoppingCart },
+  { to: "/administrativa/clientes", label: "Clientes", icon: Users },
+  { to: "/administrativa/productos", label: "Productos", icon: Package },
+  { to: "/administrativa/rebajas", label: "Rebajas", icon: BadgePercent },
+  { to: "/administrativa/new-arrivals", label: "New Arrivals", icon: Sparkles },
+  { to: "/administrativa/rendimiento", label: "Reportes", icon: FileText },
+  { to: "/administrativa/comentarios", label: "Comentarios", icon: MessageSquareText },
 ];
 
 export default function Sidebar({ onNavigate }) {

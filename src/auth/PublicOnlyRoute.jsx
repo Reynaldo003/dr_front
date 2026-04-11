@@ -15,7 +15,7 @@ export default function PublicOnlyRoute({ children }) {
     // Solo bloquea si ya existe sesión ADMIN.
     // La sesión de cliente no debe afectar la ruta /login del panel.
     if (isAuthenticated) {
-        return <Navigate to="/admin" replace />;
+        return <Navigate to="/administrativa" replace />;
     }
 
     return children ? children : <Outlet />;
