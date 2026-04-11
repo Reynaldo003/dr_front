@@ -13,8 +13,30 @@ function money(n) {
   }).format(Number(n || 0));
 }
 
+const TIPOS_ENVIO = [
+  {
+    id: "ESTANDAR",
+    nombre: "Envío estándar nacional",
+    tiempo: "2 a 7 días hábiles",
+    costo: 150,
+  },
+  {
+    id: "EXPRESS",
+    nombre: "Envío nacional express",
+    tiempo: "2 a 4 días hábiles",
+    costo: 250,
+  },
+  {
+    id: "DIA_SIGUIENTE",
+    nombre: "Envío día siguiente nacional",
+    tiempo: "24 a 48 horas hábiles",
+    costo: 399,
+  },
+];
+
 const initialForm = {
   direccion_id: "",
+  tipo_envio: "ESTANDAR",
   cliente: "",
   cliente_email: "",
   cliente_telefono: "",
@@ -27,7 +49,7 @@ const initialForm = {
 };
 
 export default function CheckoutPage() {
-  const { items, total } = useCart();
+  const { items } = useCart();
 
   const [form, setForm] = useState(initialForm);
   const [direcciones, setDirecciones] = useState([]);
@@ -43,6 +65,23 @@ export default function CheckoutPage() {
       cantidad: Number(it.qty || 1),
     }));
   }, [items]);
+
+  const subtotalProductos = useMemo(() => {
+    return (items || []).reduce(
+      (acc, it) => acc + Number(it.price || 0) * Number(it.qty || 0),
+      0,
+    );
+  }, [items]);
+
+  const envioGratis = subtotalProductos >= 1500;
+
+  const costoEnvio = useMemo(() => {
+    if (envioGratis) return 0;
+    const envio = TIPOS_ENVIO.find((x) => x.id === form.tipo_envio);
+    return Number(envio?.costo || 0);
+  }, [envioGratis, form.tipo_envio]);
+
+  const totalFinal = subtotalProductos + costoEnvio;
 
   useEffect(() => {
     let alive = true;
@@ -60,8 +99,7 @@ export default function CheckoutPage() {
         if (!alive) return;
 
         const dirs = Array.isArray(misDirecciones) ? misDirecciones : [];
-        const principal =
-          dirs.find((d) => d.principal) || dirs[0] || null;
+        const principal = dirs.find((d) => d.principal) || dirs[0] || null;
 
         setDirecciones(dirs);
         setForm((prev) => ({
@@ -101,7 +139,6 @@ export default function CheckoutPage() {
 
   const handleDireccionChange = (e) => {
     const value = e.target.value;
-
     const direccion = direcciones.find((d) => String(d.id) === String(value));
 
     if (!direccion) {
@@ -144,6 +181,7 @@ export default function CheckoutPage() {
 
       const payload = {
         direccion_id: form.direccion_id ? Number(form.direccion_id) : undefined,
+        tipo_envio: form.tipo_envio,
         cliente: form.cliente.trim(),
         cliente_email: form.cliente_email.trim(),
         cliente_telefono: form.cliente_telefono.trim(),
@@ -172,18 +210,18 @@ export default function CheckoutPage() {
   };
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-10 grid grid-cols-1 lg:grid-cols-[1.2fr_420px] gap-8">
+    <main className="mx-auto grid max-w-7xl grid-cols-1 gap-8 px-4 py-10 lg:grid-cols-[1.2fr_420px]">
       <section>
         <h1 className="text-3xl font-extrabold tracking-tight">Finalizar compra</h1>
         <p className="mt-2 text-gray-600">
-          Revisa tus datos y continúa al pago con Mercado Pago.
+          Revisa tus datos, selecciona tu envío y continúa al pago con Mercado Pago.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-6">
           <div className="rounded-3xl border p-5">
             <h2 className="text-lg font-bold">Datos del cliente</h2>
 
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <input
                 name="cliente"
                 value={form.cliente}
@@ -231,7 +269,7 @@ export default function CheckoutPage() {
                   name="direccion_id"
                   value={form.direccion_id}
                   onChange={handleDireccionChange}
-                  className="h-12 w-full rounded-2xl border px-4 bg-white"
+                  className="h-12 w-full rounded-2xl border bg-white px-4"
                 >
                   <option value="">Capturar manualmente</option>
                   {direcciones.map((dir) => (
@@ -242,7 +280,7 @@ export default function CheckoutPage() {
                 </select>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <input
                   name="direccion_linea1"
                   value={form.direccion_linea1}
@@ -293,6 +331,53 @@ export default function CheckoutPage() {
             </div>
           </div>
 
+          <div className="rounded-3xl border p-5">
+            <h2 className="text-lg font-bold">Tipo de envío</h2>
+
+            <div className="mt-4 space-y-3">
+              {TIPOS_ENVIO.map((envio) => {
+                const activo = form.tipo_envio === envio.id;
+                const precioVisible = envioGratis ? 0 : envio.costo;
+
+                return (
+                  <label
+                    key={envio.id}
+                    className={[
+                      "flex cursor-pointer items-start justify-between gap-4 rounded-2xl border p-4",
+                      activo ? "border-black bg-black/[0.03]" : "border-black/10",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="radio"
+                        name="tipo_envio"
+                        value={envio.id}
+                        checked={activo}
+                        onChange={handleChange}
+                        className="mt-1"
+                      />
+
+                      <div>
+                        <div className="font-semibold">{envio.nombre}</div>
+                        <div className="text-sm text-gray-500">{envio.tiempo}</div>
+                      </div>
+                    </div>
+
+                    <div className="text-right font-semibold">
+                      {envioGratis ? "Gratis" : money(precioVisible)}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            {envioGratis ? (
+              <div className="mt-4 rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                Tu compra ya tiene envío gratis por superar los $1,500.00 MXN.
+              </div>
+            ) : null}
+          </div>
+
           {cargandoDatos ? (
             <div className="rounded-2xl border bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
               Cargando datos del cliente...
@@ -308,20 +393,20 @@ export default function CheckoutPage() {
           <button
             type="submit"
             disabled={cargando || !items.length || cargandoDatos}
-            className="h-12 px-6 rounded-full bg-black text-white font-bold hover:opacity-90 disabled:opacity-50"
+            className="h-12 rounded-full bg-black px-6 font-bold text-white hover:opacity-90 disabled:opacity-50"
           >
             {cargando ? "Redirigiendo..." : "Continuar a Mercado Pago"}
           </button>
         </form>
       </section>
 
-      <aside className="rounded-3xl border p-5 h-fit">
+      <aside className="h-fit rounded-3xl border p-5">
         <h2 className="text-lg font-bold">Resumen del pedido</h2>
 
         <div className="mt-4 space-y-4">
           {(items || []).map((it) => (
-            <div key={it.key} className="flex gap-3 border rounded-2xl p-3">
-              <div className="h-16 w-16 rounded-xl overflow-hidden bg-gray-100 shrink-0">
+            <div key={it.key} className="flex gap-3 rounded-2xl border p-3">
+              <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-gray-100">
                 {it.image ? (
                   <img src={it.image} alt={it.name} className="h-full w-full object-cover" />
                 ) : null}
@@ -341,9 +426,28 @@ export default function CheckoutPage() {
           ))}
         </div>
 
-        <div className="mt-6 pt-4 border-t flex items-center justify-between">
-          <span className="text-gray-600">Total</span>
-          <span className="text-xl font-extrabold">{money(total)}</span>
+        <div className="mt-6 space-y-3 border-t pt-4">
+          <div className="flex items-center justify-between">
+            <span className="text-gray-600">Subtotal</span>
+            <span className="font-semibold">{money(subtotalProductos)}</span>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="text-gray-600">
+              Envío{" "}
+              {form.tipo_envio
+                ? `(${TIPOS_ENVIO.find((x) => x.id === form.tipo_envio)?.nombre || ""})`
+                : ""}
+            </span>
+            <span className="font-semibold">
+              {envioGratis ? "Gratis" : money(costoEnvio)}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between border-t pt-3">
+            <span className="text-gray-600">Total</span>
+            <span className="text-xl font-extrabold">{money(totalFinal)}</span>
+          </div>
         </div>
       </aside>
     </main>

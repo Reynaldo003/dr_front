@@ -1,17 +1,16 @@
-//src/public-site/context/cart.jsx
 import { createContext, useContext, useEffect, useMemo, useReducer } from "react";
 
 const CartContext = createContext(null);
 
-// ---- Config ----
-const STORAGE_KEY = "mdr_cart_v3";
-const STORAGE_VERSION = 3;
+const STORAGE_KEY = "mdr_cart_v4";
+const STORAGE_VERSION = 4;
 
-// ---- Utils ----
 const clampInt = (n, min, max) => {
   const x = Number(n);
+  const safeMax = Math.max(min, Number.isFinite(max) ? max : min);
+
   if (!Number.isFinite(x)) return min;
-  return Math.max(min, Math.min(max, Math.trunc(x)));
+  return Math.max(min, Math.min(safeMax, Math.trunc(x)));
 };
 
 const money2 = (n) => {
@@ -25,7 +24,7 @@ function buildKey(productId, colorName, size) {
 function calcTotals(items) {
   const count = items.reduce((acc, it) => acc + Number(it.qty || 0), 0);
   const subtotal = money2(
-    items.reduce((acc, it) => acc + money2(it.price) * Number(it.qty || 0), 0)
+    items.reduce((acc, it) => acc + money2(it.price) * Number(it.qty || 0), 0),
   );
 
   return { count, subtotal };
@@ -35,17 +34,13 @@ function calcDerived(base) {
   const items = Array.isArray(base.items) ? base.items : [];
   const { count, subtotal } = calcTotals(items);
 
-  const shipping = count > 0 ? 0 : 0;
-  const discount = 0;
-  const total = money2(subtotal + shipping - discount);
-
   return {
     items,
     count,
     subtotal,
-    shipping,
-    discount,
-    total,
+    shipping: 0,
+    discount: 0,
+    total: subtotal,
     updatedAt: Date.now(),
   };
 }
@@ -59,8 +54,8 @@ function normalizeItem(it) {
   const colorName = it.colorName ?? it.color?.name ?? "N/A";
   const colorHex = it.colorHex ?? it.color?.hex ?? "#000000";
   const size = it.size ?? "UNI";
-  const qty = clampInt(it.qty, 1, 99);
-
+  const maxStock = clampInt(it.maxStock ?? it.stock ?? 99, 1, 999);
+  const qty = clampInt(it.qty, 1, maxStock);
   const key = it.key || buildKey(productId, colorName, size);
 
   return {
@@ -77,6 +72,7 @@ function normalizeItem(it) {
     colorName,
     colorHex,
     size,
+    maxStock,
     qty,
   };
 }
@@ -94,41 +90,29 @@ function normalizeIncomingState(raw) {
   return calcDerived({ items });
 }
 
-/**
- * Item shape:
- * {
- *   key,
- *   productId,
- *   name,
- *   price,
- *   image,
- *   colorName,
- *   colorHex,
- *   size,
- *   qty
- * }
- */
-
 function cartReducer(state, action) {
   switch (action.type) {
-    case "HYDRATE": {
+    case "HYDRATE":
       return action.payload ?? state;
-    }
 
     case "ADD_ITEM": {
       const item = normalizeItem(action.payload);
       if (!item) return state;
 
       const existing = state.items.find((x) => x.key === item.key);
-
       let nextItems;
 
       if (existing) {
-        nextItems = state.items.map((x) =>
-          x.key === item.key
-            ? { ...x, qty: clampInt(x.qty + item.qty, 1, 99) }
-            : x
-        );
+        nextItems = state.items.map((x) => {
+          if (x.key !== item.key) return x;
+
+          const maxStock = Number(item.maxStock || x.maxStock || 99);
+          return {
+            ...x,
+            maxStock,
+            qty: clampInt(x.qty + item.qty, 1, maxStock),
+          };
+        });
       } else {
         nextItems = [item, ...state.items];
       }
@@ -144,7 +128,10 @@ function cartReducer(state, action) {
 
     case "SET_QTY": {
       const { key, qty } = action.payload;
-      const safeQty = clampInt(qty, 0, 99);
+      const current = state.items.find((x) => x.key === key);
+      if (!current) return state;
+
+      const safeQty = clampInt(qty, 0, Number(current.maxStock || 99));
 
       const nextItems = state.items
         .map((x) => (x.key === key ? { ...x, qty: safeQty } : x))
@@ -156,7 +143,9 @@ function cartReducer(state, action) {
     case "INC": {
       const key = action.payload;
       const nextItems = state.items.map((x) =>
-        x.key === key ? { ...x, qty: clampInt(x.qty + 1, 1, 99) } : x
+        x.key === key
+          ? { ...x, qty: clampInt(x.qty + 1, 1, Number(x.maxStock || 99)) }
+          : x,
       );
 
       return calcDerived({ ...state, items: nextItems });
@@ -166,16 +155,17 @@ function cartReducer(state, action) {
       const key = action.payload;
       const nextItems = state.items
         .map((x) =>
-          x.key === key ? { ...x, qty: clampInt(x.qty - 1, 0, 99) } : x
+          x.key === key
+            ? { ...x, qty: clampInt(x.qty - 1, 0, Number(x.maxStock || 99)) }
+            : x,
         )
         .filter((x) => x.qty > 0);
 
       return calcDerived({ ...state, items: nextItems });
     }
 
-    case "CLEAR": {
+    case "CLEAR":
       return calcDerived({ items: [] });
-    }
 
     default:
       return state;
@@ -210,7 +200,7 @@ export function CartProvider({ children }) {
         JSON.stringify({
           version: STORAGE_VERSION,
           state,
-        })
+        }),
       );
     } catch (error) {
       console.error("No se pudo guardar el carrito:", error);
@@ -232,7 +222,7 @@ export function CartProvider({ children }) {
       getItem: (key) => byKey.get(key) ?? null,
       hasItem: (key) => byKey.has(key),
 
-      addItem: ({ product, qty = 1, color, size }) => {
+      addItem: ({ product, qty = 1, color, size, maxStock = 99 }) => {
         if (!product) return;
 
         const productId = Number(product.id ?? product.productId ?? 0);
@@ -257,7 +247,8 @@ export function CartProvider({ children }) {
             colorName,
             colorHex,
             size: safeSize,
-            qty: clampInt(qty, 1, 99),
+            qty: clampInt(qty, 1, Number(maxStock || 99)),
+            maxStock: Number(maxStock || 99),
           },
         });
       },

@@ -1,3 +1,4 @@
+//src/admin/component/products/NewProductModal.jsx
 import { useMemo, useState } from "react";
 import { X, Plus, Image as ImgIcon, Trash2, Check, Palette, Upload } from "lucide-react";
 

@@ -1,3 +1,4 @@
+//src/admin/component/products/ProductViewModal.jsx
 import { X, Pencil } from "lucide-react";
 
 export default function ProductViewModal({ open, product, onClose, onEdit }) {

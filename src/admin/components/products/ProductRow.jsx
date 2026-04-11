@@ -1,3 +1,4 @@
+//src/admin/component/products/ProductRow.jsx
 import Badge from "../ui/Badge";
 
 function stockBadge(stock) {

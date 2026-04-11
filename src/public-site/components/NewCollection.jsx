@@ -1,3 +1,4 @@
+//src/public-site/components/NewCollection.jsx
 import { useEffect, useMemo, useState } from "react";
 import { obtenerProductosPublicos } from "../lib/apiPublic";
 import { adaptarProductoBackend } from "../lib/productAdapters";

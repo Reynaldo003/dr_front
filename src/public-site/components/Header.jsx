@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import logo from "../assets/logo_mis_dos_reynas.png";
-import cartBagIcon from "../assets/icons/cart-bag.png";
+import {
+  Menu,
+  Search,
+  UserRound,
+  ShoppingBag,
+  X,
+  ChevronDown,
+  ChevronUp,
+  ArrowUpRight,
+} from "lucide-react";
+import logo from "../assets/logo2.png";
 import { useCart } from "../context/cart";
 import { categories } from "../data/categories";
 import { useAuth } from "../../auth/AuthContext";
@@ -16,7 +25,9 @@ function normalizeText(value) {
 }
 
 function buildSearchText(item) {
-  return normalizeText([item?.name, item?.slug, item?.href].filter(Boolean).join(" "));
+  return normalizeText(
+    [item?.name, item?.slug, item?.href].filter(Boolean).join(" "),
+  );
 }
 
 function SearchModal({ open, onClose, items = [] }) {
@@ -49,7 +60,9 @@ function SearchModal({ open, onClose, items = [] }) {
 
   const results = useMemo(() => {
     if (!normalizedQuery) return [];
-    return items.filter((item) => buildSearchText(item).includes(normalizedQuery)).slice(0, 8);
+    return items
+      .filter((item) => buildSearchText(item).includes(normalizedQuery))
+      .slice(0, 8);
   }, [items, normalizedQuery]);
 
   const handleSubmit = (e) => {
@@ -96,7 +109,7 @@ function SearchModal({ open, onClose, items = [] }) {
               className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-black transition hover:bg-gray-50"
               aria-label="Cerrar"
             >
-              ✕
+              <X className="h-5 w-5" strokeWidth={2} />
             </button>
           </div>
 
@@ -114,8 +127,9 @@ function SearchModal({ open, onClose, items = [] }) {
 
                 <button
                   type="submit"
-                  className="inline-flex h-12 shrink-0 items-center justify-center rounded-full bg-black px-5 text-sm font-semibold text-white transition hover:bg-neutral-800"
+                  className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-black px-5 text-sm font-semibold text-white transition hover:bg-neutral-800"
                 >
+                  <Search className="h-4 w-4" strokeWidth={2} />
                   Buscar
                 </button>
               </div>
@@ -123,7 +137,9 @@ function SearchModal({ open, onClose, items = [] }) {
 
             {!normalizedQuery ? (
               <div className="mt-6">
-                <p className="text-sm font-semibold text-black/55">Sugerencias</p>
+                <p className="text-sm font-semibold text-black/55">
+                  Sugerencias
+                </p>
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   {items.slice(0, 8).map((item) => (
@@ -178,7 +194,7 @@ function SearchModal({ open, onClose, items = [] }) {
 
                         <div className="hidden sm:flex">
                           <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-black">
-                            ↗
+                            <ArrowUpRight className="h-4 w-4" strokeWidth={2} />
                           </span>
                         </div>
                       </button>
@@ -189,8 +205,8 @@ function SearchModal({ open, onClose, items = [] }) {
                         No encontramos resultados
                       </p>
                       <p className="mt-2 text-sm text-black/55">
-                        Intenta con una categoría como blusas, vestidos, pantalones,
-                        shorts o faldas.
+                        Intenta con una categoría como blusas, vestidos,
+                        pantalones, shorts o faldas.
                       </p>
                     </div>
                   )}
@@ -223,7 +239,7 @@ export default function Header({ onCartClick }) {
         slug: item.slug,
         href: item.href,
       })),
-    []
+    [],
   );
 
   const { count } = useCart();
@@ -231,7 +247,6 @@ export default function Header({ onCartClick }) {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [catalogOpenMobile, setCatalogOpenMobile] = useState(false);
-
   const [catalogOpenDesktop, setCatalogOpenDesktop] = useState(false);
   const desktopCatalogRef = useRef(null);
 
@@ -304,6 +319,11 @@ export default function Header({ onCartClick }) {
   const displayName =
     clienteUser?.nombre || clienteUser?.email?.split("@")?.[0] || "Mi cuenta";
 
+  const headerIconBtnClass =
+    "flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white transition hover:border-white/40 hover:bg-white/10";
+
+  const headerIconClass = "h-5 w-5";
+
   const handleAccountClickMobile = () => {
     if (!clienteUser) {
       setAuthOpen(true);
@@ -334,42 +354,42 @@ export default function Header({ onCartClick }) {
 
   return (
     <>
-      <header className="sticky top-0 z-50 border-b bg-white overflow-x-clip">
-        <div className="mx-auto max-w-7xl px-3 sm:px-4 overflow-x-clip">
+      <header className="sticky top-0 z-50 overflow-x-clip border-b border-white/10 bg-black">
+        <div className="mx-auto max-w-[1300px] overflow-x-clip px-3 sm:px-4">
           <div className="lg:hidden">
-            <div className="grid h-24 grid-cols-[auto,1fr,auto] items-center gap-2 sm:h-24">
+            <div className="grid h-16 grid-cols-[88px,1fr,88px] items-center gap-2 sm:h-[72px]">
               <div className="flex items-center gap-2 justify-self-start">
                 <button
                   type="button"
                   onClick={() => setMenuOpen(true)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border transition hover:bg-gray-50"
+                  className={headerIconBtnClass}
                   aria-label="Abrir menú"
                   title="Menú"
                 >
-                  <span className="text-lg leading-none">☰</span>
+                  <Menu className={headerIconClass} strokeWidth={2} />
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setSearchOpen(true)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border transition hover:bg-gray-50"
+                  className={headerIconBtnClass}
                   title="Buscar"
                   aria-label="Buscar"
                 >
-                  ⌕
+                  <Search className={headerIconClass} strokeWidth={2} />
                 </button>
               </div>
 
               <Link
                 to="/"
-                className="min-w-0 justify-self-center flex items-center justify-center"
+                className="flex min-w-0 items-center justify-center justify-self-center px-2"
                 aria-label="Ir al inicio"
                 title="Inicio"
               >
                 <img
                   src={logo}
                   alt="Logo Boutique"
-                  className="h-[100px] w-auto max-w-[min(78vw,500px)] origin-center object-contain scale-[1.06] sm:h-[110px]"
+                  className="h-20 w-auto max-w-[117px] object-contain sm:h-15 sm:max-w-[210px] [filter:brightness(0)_invert(1)]"
                   draggable="false"
                 />
               </Link>
@@ -378,15 +398,15 @@ export default function Header({ onCartClick }) {
                 <button
                   type="button"
                   onClick={handleAccountClickMobile}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border transition hover:bg-gray-50"
+                  className={headerIconBtnClass}
                   title={clienteUser ? displayName : "Cuenta"}
                   aria-label="Cuenta"
                 >
-                  👤
+                  <UserRound className={headerIconClass} strokeWidth={2} />
                 </button>
 
                 {clienteUser && accountOpenMobile && (
-                  <div className="absolute right-12 top-11 z-[70] w-52 rounded-2xl border bg-white p-2 shadow-xl">
+                  <div className="absolute right-12 top-11 z-[70] w-52 rounded-2xl border border-black/10 bg-white p-2 shadow-xl">
                     <div className="px-3 py-2 text-xs font-semibold text-gray-500">
                       {displayName}
                     </div>
@@ -437,19 +457,14 @@ export default function Header({ onCartClick }) {
                 <button
                   type="button"
                   onClick={onCartClick}
-                  className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border transition hover:bg-gray-50"
+                  className={`${headerIconBtnClass} relative`}
                   title="Carrito"
                   aria-label="Abrir carrito"
                 >
-                  <img
-                    src={cartBagIcon}
-                    alt="Carrito"
-                    className="h-[18px] w-[18px] object-contain"
-                    draggable="false"
-                  />
+                  <ShoppingBag className={headerIconClass} strokeWidth={2} />
 
                   {count > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[18px] rounded-full bg-black px-1 text-center text-[11px] leading-[18px] text-white h-[18px]">
+                    <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white px-1 text-[11px] text-black">
                       {count}
                     </span>
                   )}
@@ -458,31 +473,36 @@ export default function Header({ onCartClick }) {
             </div>
           </div>
 
-          <div className="hidden lg:flex h-32 xl:h-36 2xl:h-40 items-center justify-between gap-4">
-            <Link to="/" className="flex items-center shrink-0">
+          <div className="hidden h-28 items-center justify-between gap-4 lg:flex xl:h-32 2xl:h-36">
+            <Link to="/" className="flex shrink-0 items-center">
               <img
                 src={logo}
                 alt="Logo Boutique"
-                className="h-[180px] w-auto max-w-[420px] object-contain xl:h-[190px] xl:max-w-[560px] 2xl:h-[210px] 2xl:max-w-[640px]"
+                className="h-[92px] w-auto max-w-[300px] object-contain [filter:brightness(0)_invert(1)] xl:h-[104px] xl:max-w-[360px] 2xl:h-[116px] 2xl:max-w-[420px]"
+                draggable="false"
               />
             </Link>
 
-            <nav className="flex flex-1 items-center justify-center gap-6 text-sm font-semibold">
+            <nav className="flex flex-1 items-center justify-center gap-6 text-sm font-semibold text-white">
               <div className="relative" ref={desktopCatalogRef}>
                 <button
                   type="button"
                   onClick={() => setCatalogOpenDesktop((v) => !v)}
-                  className="inline-flex items-center gap-2 transition hover:opacity-70"
+                  className="inline-flex items-center gap-2 text-white transition hover:opacity-70"
                   aria-expanded={catalogOpenDesktop}
                   aria-haspopup="menu"
                 >
                   CATALOGO
-                  <span className="text-xs">{catalogOpenDesktop ? "▲" : "▼"}</span>
+                  {catalogOpenDesktop ? (
+                    <ChevronUp className="h-4 w-4" strokeWidth={2} />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                  )}
                 </button>
 
                 {catalogOpenDesktop && (
                   <div
-                    className="absolute left-1/2 mt-4 w-[min(760px,92vw)] -translate-x-1/2 rounded-3xl border bg-white p-5 shadow-2xl"
+                    className="absolute left-1/2 mt-4 w-[min(760px,92vw)] -translate-x-1/2 rounded-3xl border bg-white p-5 text-black shadow-2xl"
                     role="menu"
                   >
                     <div className="mb-3 text-xs font-bold text-gray-500">
@@ -516,36 +536,36 @@ export default function Header({ onCartClick }) {
               </div>
 
               {topLinks.map((t) => (
-                <Link key={t.label} to={t.to} className="hover:opacity-70">
+                <Link key={t.label} to={t.to} className="text-white hover:opacity-70">
                   {t.label}
                 </Link>
               ))}
             </nav>
 
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex shrink-0 items-center gap-3">
               <button
                 type="button"
                 onClick={() => setSearchOpen(true)}
-                className="flex h-10 w-10 items-center justify-center rounded-full border transition hover:bg-gray-50"
+                className={headerIconBtnClass}
                 title="Buscar"
                 aria-label="Buscar"
               >
-                ⌕
+                <Search className={headerIconClass} strokeWidth={2} />
               </button>
 
               <div className="relative" ref={desktopAccountRef}>
                 <button
                   type="button"
                   onClick={handleAccountClickDesktop}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border transition hover:bg-gray-50"
+                  className={headerIconBtnClass}
                   title={clienteUser ? displayName : "Cuenta"}
                   aria-label="Cuenta"
                 >
-                  👤
+                  <UserRound className={headerIconClass} strokeWidth={2} />
                 </button>
 
                 {clienteUser && accountOpenDesktop && (
-                  <div className="absolute right-0 mt-3 z-[70] w-56 rounded-2xl border bg-white p-2 shadow-xl">
+                  <div className="absolute right-0 z-[70] mt-3 w-56 rounded-2xl border border-black/10 bg-white p-2 text-black shadow-xl">
                     <div className="px-3 py-2 text-xs font-semibold text-gray-500">
                       {displayName}
                     </div>
@@ -597,19 +617,14 @@ export default function Header({ onCartClick }) {
               <button
                 type="button"
                 onClick={onCartClick}
-                className="relative flex h-10 w-10 items-center justify-center rounded-full border transition hover:bg-gray-50"
+                className={`${headerIconBtnClass} relative`}
                 title="Carrito"
                 aria-label="Abrir carrito"
               >
-                <img
-                  src={cartBagIcon}
-                  alt="Carrito"
-                  className="h-[18px] w-[18px] object-contain"
-                  draggable="false"
-                />
+                <ShoppingBag className={headerIconClass} strokeWidth={2} />
 
                 {count > 0 && (
-                  <span className="absolute -top-1 -right-1 min-w-[18px] rounded-full bg-black px-1 text-center text-[11px] leading-[18px] text-white h-[18px]">
+                  <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white px-1 text-[11px] text-black">
                     {count}
                   </span>
                 )}
@@ -630,6 +645,7 @@ export default function Header({ onCartClick }) {
             <aside className="absolute left-0 top-0 h-full w-[86vw] max-w-[360px] overflow-y-auto border-r bg-white shadow-2xl">
               <div className="flex h-16 items-center justify-between border-b px-4">
                 <div className="font-extrabold tracking-wide">MENÚ</div>
+
                 <button
                   type="button"
                   onClick={() => setMenuOpen(false)}
@@ -637,7 +653,7 @@ export default function Header({ onCartClick }) {
                   aria-label="Cerrar menú"
                   title="Cerrar"
                 >
-                  ✕
+                  <X className="h-5 w-5" strokeWidth={2} />
                 </button>
               </div>
 
@@ -659,7 +675,11 @@ export default function Header({ onCartClick }) {
                   aria-expanded={catalogOpenMobile}
                 >
                   <span>CATALOGO</span>
-                  <span className="text-sm">{catalogOpenMobile ? "▲" : "▼"}</span>
+                  {catalogOpenMobile ? (
+                    <ChevronUp className="h-4 w-4" strokeWidth={2} />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" strokeWidth={2} />
+                  )}
                 </button>
 
                 {catalogOpenMobile && (
@@ -691,7 +711,7 @@ export default function Header({ onCartClick }) {
                   </Link>
                 )}
 
-                <div className="mt-6 mb-3 text-xs font-semibold text-gray-500">
+                <div className="mb-3 mt-6 text-xs font-semibold text-gray-500">
                   ACCESOS
                 </div>
 

@@ -58,7 +58,7 @@ export default function CartDrawer({ open, onClose }) {
         role="dialog"
         aria-modal="true"
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b">
+        <div className="flex items-center justify-between border-b px-5 py-4">
           <div>
             <div className="text-lg font-semibold">Carrito</div>
             <div className="text-sm text-gray-500">{count} artículo(s)</div>
@@ -66,82 +66,98 @@ export default function CartDrawer({ open, onClose }) {
 
           <button
             onClick={onClose}
-            className="h-10 w-10 rounded-full hover:bg-gray-100 grid place-items-center"
+            className="grid h-10 w-10 place-items-center rounded-full hover:bg-gray-100"
             aria-label="Cerrar"
           >
             ✕
           </button>
         </div>
 
-        <div className="p-5 space-y-4 overflow-auto h-[calc(100%-180px)]">
+        <div className="h-[calc(100%-180px)] space-y-4 overflow-auto p-5">
           {items.length === 0 ? (
             <div className="text-gray-600">Tu carrito está vacío. Agrega algo 👀</div>
           ) : (
-            items.map((it) => (
-              <div key={it.key} className="flex gap-3 border rounded-2xl p-3">
-                <div className="h-20 w-20 rounded-xl bg-gray-100 overflow-hidden shrink-0">
-                  {it.image ? (
-                    <img
-                      src={it.image}
-                      alt={it.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : null}
-                </div>
+            items.map((it) => {
+              const maxStock = Number(it.maxStock || 99);
+              const llegoMaximo = Number(it.qty || 0) >= maxStock;
 
-                <div className="flex-1">
-                  <div className="font-medium leading-tight">{it.name}</div>
-
-                  <div className="mt-1 flex items-center gap-2 text-sm text-gray-600">
-                    <span
-                      className="inline-flex items-center gap-2 px-2 py-1 rounded-full border"
-                      title={it.colorName}
-                    >
-                      <span
-                        className="h-3 w-3 rounded-full border"
-                        style={{ backgroundColor: it.colorHex }}
+              return (
+                <div key={it.key} className="flex gap-3 rounded-2xl border p-3">
+                  <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-gray-100">
+                    {it.image ? (
+                      <img
+                        src={it.image}
+                        alt={it.name}
+                        className="h-full w-full object-cover"
                       />
-                      {it.colorName}
-                    </span>
-
-                    <span className="px-2 py-1 rounded-full border">Talla {it.size}</span>
+                    ) : null}
                   </div>
 
-                  <div className="mt-2 flex items-center justify-between">
-                    <div className="font-semibold">{money(it.price * it.qty)}</div>
+                  <div className="flex-1">
+                    <div className="font-medium leading-tight">{it.name}</div>
 
-                    <div className="flex items-center gap-2">
-                      <div className="inline-flex items-center border rounded-full overflow-hidden">
-                        <button
-                          className="h-9 w-10 hover:bg-gray-50"
-                          onClick={() => setQty(it.key, it.qty - 1)}
-                          aria-label="Restar"
-                        >
-                          −
-                        </button>
-                        <div className="h-9 w-10 grid place-items-center text-sm font-medium">
-                          {it.qty}
+                    <div className="mt-1 flex items-center gap-2 text-sm text-gray-600">
+                      <span
+                        className="inline-flex items-center gap-2 rounded-full border px-2 py-1"
+                        title={it.colorName}
+                      >
+                        <span
+                          className="h-3 w-3 rounded-full border"
+                          style={{ backgroundColor: it.colorHex }}
+                        />
+                        {it.colorName}
+                      </span>
+
+                      <span className="rounded-full border px-2 py-1">
+                        Talla {it.size}
+                      </span>
+                    </div>
+
+                    {Number.isFinite(maxStock) && maxStock < 999 ? (
+                      <div className="mt-1 text-xs text-gray-500">
+                        Disponible para esta variante: {maxStock}
+                      </div>
+                    ) : null}
+
+                    <div className="mt-2 flex items-center justify-between">
+                      <div className="font-semibold">{money(it.price * it.qty)}</div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="inline-flex items-center overflow-hidden rounded-full border">
+                          <button
+                            className="h-9 w-10 hover:bg-gray-50"
+                            onClick={() => setQty(it.key, it.qty - 1)}
+                            aria-label="Restar"
+                          >
+                            −
+                          </button>
+
+                          <div className="grid h-9 w-10 place-items-center text-sm font-medium">
+                            {it.qty}
+                          </div>
+
+                          <button
+                            className="h-9 w-10 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                            onClick={() => setQty(it.key, it.qty + 1)}
+                            aria-label="Sumar"
+                            disabled={llegoMaximo}
+                          >
+                            +
+                          </button>
                         </div>
+
                         <button
-                          className="h-9 w-10 hover:bg-gray-50"
-                          onClick={() => setQty(it.key, it.qty + 1)}
-                          aria-label="Sumar"
+                          onClick={() => removeItem(it.key)}
+                          className="h-9 rounded-full border px-3 text-sm hover:bg-gray-50"
                         >
-                          +
+                          Quitar
                         </button>
                       </div>
-
-                      <button
-                        onClick={() => removeItem(it.key)}
-                        className="h-9 px-3 rounded-full border hover:bg-gray-50 text-sm"
-                      >
-                        Quitar
-                      </button>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 

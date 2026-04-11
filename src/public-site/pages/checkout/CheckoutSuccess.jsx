@@ -1,3 +1,4 @@
+// src/public-site/pages/checkout/CheckoutSuccess.jsx
 import { useEffect, useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useCart } from "../../context/cart";
@@ -75,11 +76,6 @@ export default function CheckoutSuccess() {
             </div>
           </div>
         </div>
-
-        <p className="mt-6 text-sm text-gray-600">
-          El estado final de inventario y pago lo confirma el backend mediante el webhook de Mercado Pago.
-        </p>
-
         <div className="mt-8 flex flex-wrap gap-3">
           <Link
             to="/"

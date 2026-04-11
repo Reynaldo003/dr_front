@@ -1,3 +1,4 @@
+//src/public-site/components/CollectionTabs.jsx
 import { useMemo, useState } from "react";
 import { products } from "../data/products";
 
@@ -36,7 +37,7 @@ export default function CollectionTabs() {
             <span className="mr-3">●</span>Nueva colección
           </button>
 
-          
+
         </div>
 
         <button className="rounded-full border px-8 py-3 text-sm font-semibold hover:bg-gray-50">

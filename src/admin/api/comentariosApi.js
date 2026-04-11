@@ -1,5 +1,5 @@
 // dr_front/src/public-site/lib/comentariosApi.js
-const API_BASE_URL = import.meta.env.VITE_API_URL || "";
+const API_BASE_URL = "https://misdosreynas.com";
 
 async function request(path, options = {}) {
   const headers = {

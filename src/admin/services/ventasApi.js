@@ -1,8 +1,6 @@
 import { getAdminToken } from "./adminAuthApi";
 
-const API_BASE = (
-  import.meta.env.VITE_API_URL || "/api"
-).replace(/\/+$/, "");
+const API_BASE = "https://misdosreynas.com/api";
 
 function getAuthHeaders() {
   const token = getAdminToken();

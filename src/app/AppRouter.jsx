@@ -1,3 +1,4 @@
+//src/app/AppRouter.jsx
 import { Routes, Route, Navigate } from "react-router-dom";
 
 import ProtectedRoute from "../auth/ProtectedRoute.jsx";
@@ -30,7 +31,7 @@ export default function AppRouter() {
       />
 
       <Route
-        path="/admin"
+        path="/administrativa"
         element={
           <ProtectedRoute>
             <AdminLayout />

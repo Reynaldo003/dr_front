@@ -1,7 +1,4 @@
-const API_BASE = (
-  import.meta.env.VITE_API_URL || "/api"
-).replace(/\/+$/, "");
-
+const API_BASE = "https://misdosreynas.com/api";
 const ADMIN_STORAGE_KEY = "admin_session";
 
 export function getAdminSession() {

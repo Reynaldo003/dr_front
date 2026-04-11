@@ -20,6 +20,10 @@ function normalizarColor(nombre = "") {
   return COLOR_MAP[nombre.trim().toLowerCase()] || "#d4d4d8";
 }
 
+function buildVariantKey(color = "", talla = "") {
+  return `${String(color).trim()}__${String(talla).trim()}`;
+}
+
 export function adaptarProductoBackend(producto) {
   const imagenesSecundarias = Array.isArray(producto.imagenes)
     ? producto.imagenes.map((item) => item.imagen).filter(Boolean)
@@ -29,18 +33,25 @@ export function adaptarProductoBackend(producto) {
     Boolean,
   );
 
+  const variantes = Array.isArray(producto.variantes) ? producto.variantes : [];
+
   const coloresUnicos = Array.from(
-    new Set((producto.variantes || []).map((v) => v.color).filter(Boolean)),
+    new Set(variantes.map((v) => v.color).filter(Boolean)),
   );
 
   const tallasUnicas = Array.from(
-    new Set((producto.variantes || []).map((v) => v.talla).filter(Boolean)),
+    new Set(variantes.map((v) => v.talla).filter(Boolean)),
   );
 
   const colors = coloresUnicos.map((name) => ({
     name,
     hex: normalizarColor(name),
   }));
+
+  const variantStockMap = variantes.reduce((acc, item) => {
+    acc[buildVariantKey(item.color, item.talla)] = Number(item.stock || 0);
+    return acc;
+  }, {});
 
   return {
     id: producto.id,
@@ -51,11 +62,13 @@ export function adaptarProductoBackend(producto) {
     description: producto.descripcion || "",
     price: Number(producto.precio || 0),
     category: producto.categoria || "",
-    badge: Number(producto.stock_disponible || 0) <= 5 ? "Últimas piezas" : "",
+    badge: Number(producto.stock_total || 0) <= 5 ? "Últimas piezas" : "",
     images,
     colors,
     sizes: tallasUnicas,
     stockDisponible: Number(producto.stock_disponible || 0),
+    stockTotal: Number(producto.stock_total || 0),
+    variantStockMap,
     raw: producto,
   };
 }

@@ -1,64 +1,34 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-
+// src/public-site/components/FooterWatermark.jsx
 export default function FooterWatermark() {
-  const wrapRef = useRef(null);
-  const textRef = useRef(null);
-  const [scale, setScale] = useState(1);
-
-  const recalc = () => {
-    const wrap = wrapRef.current;
-    const text = textRef.current;
-    if (!wrap || !text) return;
-
-    const wrapWidth = wrap.clientWidth;
-    const textWidth = text.scrollWidth;
-
-    if (!wrapWidth || !textWidth) return;
-
-    // Si el texto es más ancho que el contenedor, lo escalamos para que quepa.
-    const nextScale = Math.min(1, wrapWidth / textWidth);
-
-    setScale((prev) => (Math.abs(prev - nextScale) > 0.01 ? nextScale : prev));
-  };
-
-  useLayoutEffect(() => {
-    recalc();
-  }, []);
-
-  useEffect(() => {
-    const ro = new ResizeObserver(() => recalc());
-    if (wrapRef.current) ro.observe(wrapRef.current);
-
-    window.addEventListener("resize", recalc);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", recalc);
-    };
-  }, []);
-
   return (
-    <div className="absolute inset-x-0 bottom-0 z-0 pointer-events-none select-none overflow-hidden">
-      {/* Wrapper centrado SIEMPRE */}
-      <div ref={wrapRef} className="px-4 sm:px-6 pb-2 overflow-hidden">
-        <div
-          ref={textRef}
-          className="
-            flex items-end justify-center
-            whitespace-nowrap leading-none text-white
-            blur-[0.6px]
-            tracking-[0.06em] sm:tracking-[0.10em] md:tracking-[0.14em]
-          "
-          style={{
-            // translateY para que quede “abajo” tipo referencia + scale para que NUNCA se corte
-            transform: `translateY(10%) scale(${scale})`,
-            transformOrigin: "center bottom",
-            fontSize: "clamp(36px, 11vw, 240px)", // min más bajo para pantallas raras
-          }}
-        >
-          <span className="font-extralight">MIS&nbsp;DOS</span>
-          <span className="font-extrabold ml-4 sm:ml-6">REYNAS</span>
-        </div>
+    <a
+      href="https://www.instagram.com/robots.dev/"
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label="Desarrollado por RObots"
+      className="
+        inline-flex items-center gap-3
+        rounded-2xl border border-white/10
+        bg-white/5 px-4 py-3
+        text-white/80 backdrop-blur-sm
+        shadow-md transition-all duration-300
+        hover:bg-white/10 hover:text-white
+      "
+    >
+      <img
+        src="/RObots.png"
+        alt="Logo RObots"
+        className="h-9 w-9 rounded-full bg-black/30 p-1 object-contain"
+      />
+
+      <div className="leading-none">
+        <span className="block text-[10px] uppercase tracking-[0.18em] text-white/50">
+          Desarrollado por
+        </span>
+        <span className="block text-sm font-semibold text-white/90">
+          RObots
+        </span>
       </div>
-    </div>
+    </a>
   );
 }

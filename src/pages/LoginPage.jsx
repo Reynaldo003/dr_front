@@ -14,7 +14,7 @@ export default function LoginPage() {
     const [enviando, setEnviando] = useState(false);
     const [error, setError] = useState("");
 
-    const rutaDestino = location.state?.from?.pathname || "/admin";
+    const rutaDestino = location.state?.from?.pathname || "/administrativa";
 
     const handleChange = (e) => {
         const { name, value } = e.target;

@@ -6,9 +6,9 @@ import Reportes from "../pages/Reportes";
 
 
 export const adminRoutes = [
-  { path: "/admin", element: <Dashboard /> },
-  { path: "/admin/ventas", element: <Ventas /> },
-  { path: "/admin/productos", element: <Productos /> },
-  { path: "/admin/reportes", element: <Reportes /> },
+  { path: "/administrativa", element: <Dashboard /> },
+  { path: "/administrativa/ventas", element: <Ventas /> },
+  { path: "/administrativa/productos", element: <Productos /> },
+  { path: "/administrativa/reportes", element: <Reportes /> },
 
 ];

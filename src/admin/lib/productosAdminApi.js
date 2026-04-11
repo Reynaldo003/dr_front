@@ -1,5 +1,4 @@
-// dr_front/src/admin/lib/productosAdminApi.js
-const API_BASE_URL = import.meta.env.VITE_API_URL || "";
+const API_BASE_URL = "https://misdosreynas.com";
 
 async function request(path, options = {}) {
   const headers = {
@@ -16,6 +15,10 @@ async function request(path, options = {}) {
     ...options,
     headers,
   });
+
+  if (response.status === 204) {
+    return null;
+  }
 
   let data = null;
   const contentType = response.headers.get("content-type") || "";
@@ -59,5 +62,11 @@ export function actualizarProducto(id, payload) {
   return request(`/api/productos/${id}/`, {
     method: "PATCH",
     body: JSON.stringify(payload),
+  });
+}
+
+export function eliminarProducto(id) {
+  return request(`/api/productos/${id}/`, {
+    method: "DELETE",
   });
 }

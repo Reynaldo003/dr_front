@@ -4,14 +4,14 @@ import Badge from "../components/ui/Badge";
 import NewProductModal from "../components/products/NewProductModal";
 import ProductViewModal from "../components/products/ProductViewModal";
 import ProductEditModal from "../components/products/ProductEditModal";
-import { Search, Plus, Pencil, Eye } from "lucide-react";
+import { Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import {
   obtenerProductos,
   crearProducto,
   actualizarProducto,
-} from "../services/productosApi";
+  eliminarProducto,
+} from "../lib/productosAdminApi";
 
-// --- UI helpers ---
 function stockBadge(stock) {
   const s = Number(stock || 0);
   if (s <= 0) return <Badge variant="danger">Sin stock</Badge>;
@@ -44,7 +44,12 @@ function toUiProduct(p) {
     id: p.codigo || String(p.id),
     title: p.titulo || "",
     sku: p.sku || "—",
+    cost: Number(p.costo || 0),
     price: Number(p.precio || 0),
+    salePrice:
+      p.precio_rebaja !== null && p.precio_rebaja !== undefined
+        ? Number(p.precio_rebaja)
+        : null,
     status: p.estado || "Activo",
     category: p.categoria || "",
     description: p.descripcion || "",
@@ -85,7 +90,12 @@ function toApiPayload(ui) {
     titulo: ui.title?.trim() || "",
     sku: ui.sku?.trim() || "",
     descripcion: ui.description?.trim() || "",
+    costo: Number(ui.cost || 0),
     precio: Number(ui.price || 0),
+    precio_rebaja:
+      ui.salePrice === null || ui.salePrice === "" || ui.salePrice === undefined
+        ? null
+        : Number(ui.salePrice || 0),
     categoria: ui.category || "",
     estado: ui.status || "Activo",
     imagen_principal: ui.heroUrl || "",
@@ -160,13 +170,18 @@ export default function Productos() {
         payload?.variants?.totalStock ??
         Object.values(payload?.variants?.stockMap ?? {}).reduce(
           (a, b) => a + Number(b || 0),
-          0
+          0,
         );
 
       const ui = {
         title: payload.title,
         sku: payload.sku || "—",
+        cost: Number(payload.cost || 0),
         price: Number(payload.price || 0),
+        salePrice:
+          payload.salePrice === null || payload.salePrice === undefined
+            ? null
+            : Number(payload.salePrice || 0),
         category: payload.category || "",
         status: payload.status || "Activo",
         heroUrl: payload.heroUrl || "",
@@ -180,9 +195,10 @@ export default function Productos() {
       const productoUi = toUiProduct(creado);
 
       setProducts((prev) => [productoUi, ...prev]);
+      setOpenNew(false);
     } catch (err) {
       console.error(err);
-      alert("No se pudo guardar el producto. Revisa que el SKU no esté repetido.");
+      alert("No se pudo guardar el producto. Revisa SKU y datos de rebaja.");
     } finally {
       setGuardando(false);
     }
@@ -194,13 +210,13 @@ export default function Productos() {
 
       const actualizado = await actualizarProducto(
         updatedUi.apiId,
-        toApiPayload(updatedUi)
+        toApiPayload(updatedUi),
       );
 
       const productoUi = toUiProduct(actualizado);
 
       setProducts((prev) =>
-        prev.map((item) => (item.apiId === productoUi.apiId ? productoUi : item))
+        prev.map((item) => (item.apiId === productoUi.apiId ? productoUi : item)),
       );
 
       setSelected(productoUi);
@@ -213,19 +229,44 @@ export default function Productos() {
     }
   }
 
+  async function handleDelete(producto) {
+    const ok = window.confirm(
+      `¿Seguro que quieres eliminar el producto "${producto.title}"?`,
+    );
+    if (!ok) return;
+
+    try {
+      await eliminarProducto(producto.apiId);
+
+      setProducts((prev) =>
+        prev.filter((item) => item.apiId !== producto.apiId),
+      );
+
+      if (selected?.apiId === producto.apiId) {
+        setSelected(null);
+        setOpenView(false);
+        setOpenEdit(false);
+      }
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "No se pudo eliminar el producto.");
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fadeIn">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Productos</h1>
-          <p className="text-sm text-zinc-500">
-            Inventario de productos
-          </p>
+          <p className="text-sm text-zinc-500">Inventario de productos</p>
         </div>
 
         <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
           <div className="relative w-full sm:w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
+              size={18}
+            />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
@@ -255,27 +296,39 @@ export default function Productos() {
         ) : (
           <>
             <div className="hidden md:block overflow-auto rounded-2xl border">
-              <table className="min-w-[980px] w-full text-sm">
+              <table className="min-w-[1080px] w-full text-sm">
                 <thead className="bg-zinc-50">
                   <tr>
-                    {["ID", "Producto", "Stock", "Precio", "Estado", "Acciones"].map((h) => (
-                      <th key={h} className="text-left px-4 py-3 font-semibold text-zinc-700">
-                        {h}
-                      </th>
-                    ))}
+                    {["ID", "Producto", "Stock", "Precio", "Estado", "Acciones"].map(
+                      (h) => (
+                        <th
+                          key={h}
+                          className="text-left px-4 py-3 font-semibold text-zinc-700"
+                        >
+                          {h}
+                        </th>
+                      ),
+                    )}
                   </tr>
                 </thead>
 
                 <tbody className="bg-white">
                   {filtered.map((p) => (
-                    <tr key={p.apiId} className="border-t hover:bg-zinc-50 transition-colors">
+                    <tr
+                      key={p.apiId}
+                      className="border-t hover:bg-zinc-50 transition-colors"
+                    >
                       <td className="px-4 py-3">{p.id}</td>
 
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="h-12 w-12 rounded-xl border bg-zinc-100 overflow-hidden flex-none">
                             {p.heroUrl ? (
-                              <img src={p.heroUrl} alt={p.title} className="h-full w-full object-cover" />
+                              <img
+                                src={p.heroUrl}
+                                alt={p.title}
+                                className="h-full w-full object-cover"
+                              />
                             ) : (
                               <div className="h-full w-full grid place-items-center text-[10px] text-zinc-500">
                                 Sin
@@ -285,9 +338,12 @@ export default function Productos() {
 
                           <div className="min-w-0">
                             <div className="font-semibold truncate">{p.title}</div>
-                            <div className="text-xs text-zinc-500 truncate">SKU: {p.sku}</div>
+                            <div className="text-xs text-zinc-500 truncate">
+                              SKU: {p.sku}
+                            </div>
                             <div className="text-[11px] text-zinc-500 truncate">
-                              {p.variants?.colors?.length || 0} colores · {p.variants?.sizes?.length || 0} tallas
+                              {p.variants?.colors?.length || 0} colores ·{" "}
+                              {p.variants?.sizes?.length || 0} tallas
                             </div>
                           </div>
                         </div>
@@ -300,7 +356,18 @@ export default function Productos() {
                         </div>
                       </td>
 
-                      <td className="px-4 py-3 font-semibold">${Number(p.price).toLocaleString()}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-semibold">
+                          ${Number(p.price).toLocaleString()}
+                        </div>
+
+                        {p.salePrice !== null ? (
+                          <div className="text-xs text-zinc-500">
+                            Rebaja: ${Number(p.salePrice).toLocaleString()}
+                          </div>
+                        ) : null}
+                      </td>
+
                       <td className="px-4 py-3">{statusBadge(p.status)}</td>
 
                       <td className="px-4 py-3">
@@ -311,11 +378,19 @@ export default function Productos() {
                           >
                             <Eye size={14} /> Ver
                           </button>
+
                           <button
                             onClick={() => handleOpenEdit(p)}
                             className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 text-white px-3 py-2 text-xs hover:opacity-95 active:scale-[0.98] transition"
                           >
                             <Pencil size={14} /> Editar
+                          </button>
+
+                          <button
+                            onClick={() => handleDelete(p)}
+                            className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-3 py-2 text-xs text-red-600 hover:bg-red-50 active:scale-[0.98] transition"
+                          >
+                            <Trash2 size={14} /> Eliminar
                           </button>
                         </div>
                       </td>
@@ -324,7 +399,10 @@ export default function Productos() {
 
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-4 py-10 text-center text-sm text-zinc-600">
+                      <td
+                        colSpan={6}
+                        className="px-4 py-10 text-center text-sm text-zinc-600"
+                      >
                         No hay productos con ese filtro.
                       </td>
                     </tr>
@@ -339,7 +417,11 @@ export default function Productos() {
                   <div className="flex items-start gap-3">
                     <div className="h-16 w-16 rounded-2xl border bg-zinc-100 overflow-hidden flex-none">
                       {p.heroUrl ? (
-                        <img src={p.heroUrl} alt={p.title} className="h-full w-full object-cover" />
+                        <img
+                          src={p.heroUrl}
+                          alt={p.title}
+                          className="h-full w-full object-cover"
+                        />
                       ) : (
                         <div className="h-full w-full grid place-items-center text-xs text-zinc-500">
                           Sin foto
@@ -355,7 +437,8 @@ export default function Productos() {
                             {p.id} · SKU: {p.sku}
                           </div>
                           <div className="text-[11px] text-zinc-500 truncate mt-1">
-                            {p.variants?.colors?.length || 0} colores · {p.variants?.sizes?.length || 0} tallas
+                            {p.variants?.colors?.length || 0} colores ·{" "}
+                            {p.variants?.sizes?.length || 0} tallas
                           </div>
                         </div>
                         {statusBadge(p.status)}
@@ -364,8 +447,11 @@ export default function Productos() {
                       <div className="mt-2 flex items-center justify-between">
                         <div>
                           <div className="text-xs text-zinc-500">Precio</div>
-                          <div className="font-semibold">${Number(p.price).toLocaleString()}</div>
+                          <div className="font-semibold">
+                            ${Number(p.price).toLocaleString()}
+                          </div>
                         </div>
+
                         <div className="text-right">
                           <div className="text-xs text-zinc-500">Stock</div>
                           <div className="flex items-center gap-2 justify-end">
@@ -375,18 +461,26 @@ export default function Productos() {
                         </div>
                       </div>
 
-                      <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div className="mt-3 grid grid-cols-3 gap-2">
                         <button
                           onClick={() => handleOpenView(p)}
                           className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50 active:scale-[0.98] transition"
                         >
                           Ver
                         </button>
+
                         <button
                           onClick={() => handleOpenEdit(p)}
                           className="rounded-xl bg-zinc-900 text-white px-4 py-2 text-sm hover:opacity-95 active:scale-[0.98] transition"
                         >
                           Editar
+                        </button>
+
+                        <button
+                          onClick={() => handleDelete(p)}
+                          className="rounded-xl border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 active:scale-[0.98] transition"
+                        >
+                          Eliminar
                         </button>
                       </div>
                     </div>
@@ -405,6 +499,7 @@ export default function Productos() {
 
         <div className="mt-4 text-xs text-zinc-500 flex items-center justify-between gap-2">
           <div>Total: {filtered.length} productos</div>
+          {guardando ? <div>Guardando cambios...</div> : null}
         </div>
       </Card>
 

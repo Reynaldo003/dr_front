@@ -1,6 +1,48 @@
+import { useEffect, useState } from "react";
 import heroVideo from "../public/videos/hero-boutique.mp4";
 
+const TITULO = "WELCOME TO YOUR FAVORITE PLACE";
+const SUBTITULO = "Welcome Your Favorite Place!";
+
 export default function Hero() {
+  const [tituloVisible, setTituloVisible] = useState("");
+  const [subtituloVisible, setSubtituloVisible] = useState("");
+  const [mostrarCursorTitulo, setMostrarCursorTitulo] = useState(true);
+  const [mostrarCursorSubtitulo, setMostrarCursorSubtitulo] = useState(false);
+
+  useEffect(() => {
+    let i = 0;
+    let timeoutId;
+
+    const escribirTitulo = () => {
+      if (i <= TITULO.length) {
+        setTituloVisible(TITULO.slice(0, i));
+        i += 1;
+        timeoutId = setTimeout(escribirTitulo, 55);
+      } else {
+        setMostrarCursorTitulo(false);
+        setMostrarCursorSubtitulo(true);
+        escribirSubtitulo();
+      }
+    };
+
+    let j = 0;
+
+    const escribirSubtitulo = () => {
+      if (j <= SUBTITULO.length) {
+        setSubtituloVisible(SUBTITULO.slice(0, j));
+        j += 1;
+        timeoutId = setTimeout(escribirSubtitulo, 35);
+      } else {
+        setMostrarCursorSubtitulo(false);
+      }
+    };
+
+    escribirTitulo();
+
+    return () => clearTimeout(timeoutId);
+  }, []);
+
   return (
     <section className="relative isolate w-full overflow-hidden">
       <div className="relative h-[420px] sm:h-[480px] md:h-[560px] xl:h-[620px] 2xl:h-[680px]">
@@ -20,17 +62,23 @@ export default function Hero() {
         <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-black/10 to-black/10" />
 
         <div className="relative z-10 h-full">
-          <div className="mx-auto flex h-full max-w-7xl px-4">
+          <div className="mx-auto flex h-full w-full max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="flex w-full flex-col items-center justify-center text-center">
-              <div className="w-max max-w-full">
-                <h1 className="animate-typingFast overflow-hidden whitespace-nowrap border-r-4 border-r-white pr-5 text-[clamp(38px,6vw,86px)] font-extrabold leading-[0.95] tracking-tight text-white">
-                  Coming Soon
+              <div className="w-full max-w-6xl">
+                <h1 className="mx-auto text-[clamp(28px,7vw,86px)] font-extrabold leading-[0.95] tracking-tight text-white">
+                  {tituloVisible}
+                  {mostrarCursorTitulo && (
+                    <span className="ml-1 inline-block h-[0.95em] w-[4px] animate-pulse bg-white align-[-0.08em]" />
+                  )}
                 </h1>
               </div>
 
-              <div className="mt-4 w-max max-w-full">
-                <p className="animate-typingSlow overflow-hidden whitespace-nowrap border-r-4 border-r-white pr-4 text-sm text-white/90 sm:text-base md:text-lg">
-                  Welcome Your Favorite Place!
+              <div className="mt-4 w-full max-w-2xl">
+                <p className="mx-auto text-sm text-white/90 sm:text-base md:text-lg">
+                  {subtituloVisible}
+                  {mostrarCursorSubtitulo && (
+                    <span className="ml-1 inline-block h-[1em] w-[3px] animate-pulse bg-white align-[-0.08em]" />
+                  )}
                 </p>
               </div>
 

@@ -1,6 +1,5 @@
-const API_BASE = (
-  import.meta.env.VITE_API_URL || "/api"
-).replace(/\/+$/, "");
+//src/public-site/lib/apiPublic.js
+const API_BASE = "https://misdosreynas.com/api";
 
 const CLIENTE_STORAGE_KEY = "cliente_session";
 
