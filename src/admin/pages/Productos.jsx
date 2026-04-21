@@ -1,10 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
 import NewProductModal from "../components/products/NewProductModal";
 import ProductViewModal from "../components/products/ProductViewModal";
 import ProductEditModal from "../components/products/ProductEditModal";
-import { Eye, Pencil, Plus, Search, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  Eye,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import {
   obtenerProducto,
   obtenerProductos,
@@ -13,7 +21,7 @@ import {
   eliminarProducto,
 } from "../lib/productosAdminApi";
 
-const PAGE_SIZE = 40;
+const PAGE_SIZE = 30;
 
 function useEsMobile() {
   const [esMobile, setEsMobile] = useState(() => {
@@ -166,6 +174,9 @@ export default function Productos() {
   const [openEdit, setOpenEdit] = useState(false);
   const [selected, setSelected] = useState(null);
 
+  const detalleCacheRef = useRef(new Map());
+  const detalleAbortRef = useRef(null);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedQ(q.trim());
@@ -178,104 +189,155 @@ export default function Productos() {
     setPage(1);
   }, [debouncedQ]);
 
-  const cargarProductos = useCallback(async () => {
-    const controller = new AbortController();
+  const aplicarRespuestaListado = useCallback((data, paginaActual) => {
+    const results = Array.isArray(data?.results) ? data.results : [];
 
-    try {
+    setProducts(results.map(toUiProduct));
+    setPageInfo({
+      count: Number(data?.count || 0),
+      page: Number(data?.page || paginaActual),
+      pageSize: Number(data?.page_size || PAGE_SIZE),
+      pages: Number(data?.pages || 1),
+      hasPrevious: Boolean(data?.has_previous),
+      hasNext: Boolean(data?.has_next),
+    });
+  }, []);
+
+  const recargarPaginaActual = useCallback(
+    async (paginaActual = page) => {
       setLoading(true);
       setError("");
 
-      const data = await obtenerProductos(
-        {
+      try {
+        const data = await obtenerProductos({
           buscar: debouncedQ,
-          page,
+          page: paginaActual,
           page_size: PAGE_SIZE,
-        },
-        { signal: controller.signal },
-      );
+        });
 
-      const results = Array.isArray(data?.results) ? data.results : [];
-      setProducts(results.map(toUiProduct));
-      setPageInfo({
-        count: Number(data?.count || 0),
-        page: Number(data?.page || page),
-        pageSize: Number(data?.page_size || PAGE_SIZE),
-        pages: Number(data?.pages || 1),
-        hasPrevious: Boolean(data?.has_previous),
-        hasNext: Boolean(data?.has_next),
+        aplicarRespuestaListado(data, paginaActual);
+      } catch (err) {
+        setError("No se pudieron cargar los productos.");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [aplicarRespuestaListado, debouncedQ, page],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let activo = true;
+
+    async function cargar() {
+      setLoading(true);
+      setError("");
+
+      try {
+        const data = await obtenerProductos(
+          {
+            buscar: debouncedQ,
+            page,
+            page_size: PAGE_SIZE,
+          },
+          { signal: controller.signal },
+        );
+
+        if (!activo) return;
+        aplicarRespuestaListado(data, page);
+      } catch (err) {
+        if (!activo || err?.name === "AbortError") return;
+        setError("No se pudieron cargar los productos.");
+        console.error(err);
+      } finally {
+        if (activo) {
+          setLoading(false);
+        }
+      }
+    }
+
+    cargar();
+
+    return () => {
+      activo = false;
+      controller.abort();
+    };
+  }, [aplicarRespuestaListado, debouncedQ, page]);
+
+  useEffect(() => {
+    return () => {
+      if (detalleAbortRef.current) {
+        detalleAbortRef.current.abort();
+      }
+    };
+  }, []);
+
+  async function cargarDetalleProducto(productoBase) {
+    if (!productoBase?.apiId) return;
+
+    const apiId = productoBase.apiId;
+    const cacheado = detalleCacheRef.current.get(apiId);
+
+    if (cacheado) {
+      setSelected(cacheado);
+      return;
+    }
+
+    if (detalleAbortRef.current) {
+      detalleAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    detalleAbortRef.current = controller;
+    setCargandoDetalle(true);
+
+    try {
+      const data = await obtenerProducto(apiId, { signal: controller.signal });
+
+      if (detalleAbortRef.current !== controller) return;
+
+      const productoCompleto = toUiProduct(data);
+      detalleCacheRef.current.set(apiId, productoCompleto);
+
+      setSelected((prev) => {
+        if (!prev || prev.apiId !== apiId) return prev;
+        return productoCompleto;
       });
     } catch (err) {
       if (err?.name === "AbortError") return;
-      setError("No se pudieron cargar los productos.");
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-
-    return () => controller.abort();
-  }, [debouncedQ, page]);
-
-  useEffect(() => {
-    cargarProductos();
-  }, [cargarProductos]);
-
-  async function recargarPaginaActual() {
-    try {
-      setLoading(true);
-      setError("");
-
-      const data = await obtenerProductos({
-        buscar: debouncedQ,
-        page,
-        page_size: PAGE_SIZE,
-      });
-
-      const results = Array.isArray(data?.results) ? data.results : [];
-      setProducts(results.map(toUiProduct));
-      setPageInfo({
-        count: Number(data?.count || 0),
-        page: Number(data?.page || page),
-        pageSize: Number(data?.page_size || PAGE_SIZE),
-        pages: Number(data?.pages || 1),
-        hasPrevious: Boolean(data?.has_previous),
-        hasNext: Boolean(data?.has_next),
-      });
-    } catch (err) {
-      setError("No se pudieron cargar los productos.");
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleOpenView(p) {
-    try {
-      setCargandoDetalle(true);
-      const data = await obtenerProducto(p.apiId);
-      const productoUi = toUiProduct(data);
-      setSelected(productoUi);
-      setOpenView(true);
-    } catch (err) {
       console.error(err);
       alert(err.message || "No se pudo cargar el detalle del producto.");
     } finally {
-      setCargandoDetalle(false);
+      if (detalleAbortRef.current === controller) {
+        detalleAbortRef.current = null;
+        setCargandoDetalle(false);
+      }
     }
   }
 
-  async function handleOpenEdit(p) {
-    try {
-      setCargandoDetalle(true);
-      const data = await obtenerProducto(p.apiId);
-      const productoUi = toUiProduct(data);
-      setSelected(productoUi);
-      setOpenEdit(true);
-    } catch (err) {
-      console.error(err);
-      alert(err.message || "No se pudo cargar el detalle del producto.");
-    } finally {
-      setCargandoDetalle(false);
-    }
+  function handleOpenView(p) {
+    setSelected(p);
+    setOpenEdit(false);
+    setOpenView(true);
+    cargarDetalleProducto(p);
+  }
+
+  function handleOpenEdit(p) {
+    setSelected(p);
+    setOpenView(false);
+    setOpenEdit(true);
+    cargarDetalleProducto(p);
+  }
+
+  function handleCloseView() {
+    setOpenView(false);
+    setCargandoDetalle(false);
+  }
+
+  function handleCloseEdit() {
+    setOpenEdit(false);
+    setCargandoDetalle(false);
   }
 
   async function handleCreate(payload) {
@@ -307,13 +369,20 @@ export default function Productos() {
         stockTotal,
       };
 
-      await crearProducto(toApiPayload(ui));
+      const creado = await crearProducto(toApiPayload(ui));
+      const productoCreado = toUiProduct(creado);
+      detalleCacheRef.current.set(productoCreado.apiId, productoCreado);
+
       setOpenNew(false);
-      setPage(1);
-      await recargarPaginaActual();
+
+      if (page !== 1) {
+        setPage(1);
+      } else {
+        await recargarPaginaActual(1);
+      }
     } catch (err) {
       console.error(err);
-      alert(err.message || "No se pudo guardar el producto.");
+      throw err;
     } finally {
       setGuardando(false);
     }
@@ -329,6 +398,7 @@ export default function Productos() {
       );
 
       const productoUi = toUiProduct(actualizado);
+      detalleCacheRef.current.set(productoUi.apiId, productoUi);
 
       setProducts((prev) =>
         prev.map((item) => (item.apiId === productoUi.apiId ? productoUi : item)),
@@ -352,16 +422,16 @@ export default function Productos() {
 
     try {
       await eliminarProducto(producto.apiId);
+      detalleCacheRef.current.delete(producto.apiId);
 
       const soloHabiaUno = products.length === 1;
       const habiaPaginaAnterior = page > 1;
 
       if (soloHabiaUno && habiaPaginaAnterior) {
         setPage((prev) => prev - 1);
-        return;
+      } else {
+        await recargarPaginaActual(page);
       }
-
-      await recargarPaginaActual();
 
       if (selected?.apiId === producto.apiId) {
         setSelected(null);
@@ -642,16 +712,16 @@ export default function Productos() {
 
       <NewProductModal
         open={openNew}
+        saving={guardando}
         onClose={() => setOpenNew(false)}
-        onSave={async (payload) => {
-          await handleCreate(payload);
-        }}
+        onSave={handleCreate}
       />
 
       <ProductViewModal
         open={openView}
         product={selected}
-        onClose={() => setOpenView(false)}
+        loading={cargandoDetalle}
+        onClose={handleCloseView}
         onEdit={() => {
           setOpenView(false);
           setOpenEdit(true);
@@ -661,7 +731,8 @@ export default function Productos() {
       <ProductEditModal
         open={openEdit}
         product={selected}
-        onClose={() => setOpenEdit(false)}
+        loading={cargandoDetalle}
+        onClose={handleCloseEdit}
         onSave={handleUpdate}
       />
     </div>

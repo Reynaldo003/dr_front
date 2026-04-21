@@ -1,7 +1,6 @@
 //src/admin/component/products/ProductViewModal.jsx
 import { X, Pencil } from "lucide-react";
-
-export default function ProductViewModal({ open, product, onClose, onEdit }) {
+export default function ProductViewModal({ open, product, onClose, onEdit, loading = false }) {
   if (!open || !product) return null;
 
   const thumbs = [
@@ -39,7 +38,11 @@ export default function ProductViewModal({ open, product, onClose, onEdit }) {
               </button>
             </div>
           </div>
-
+          {loading ? (
+            <div className="mx-4 mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 sm:mx-6">
+              Cargando detalle del producto...
+            </div>
+          ) : null}
           <div className="flex-1 overflow-auto">
             <div className="px-4 sm:px-6 py-5 grid gap-4 lg:grid-cols-[1fr_320px]">
               <div className="space-y-3">

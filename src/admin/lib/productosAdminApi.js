@@ -1,3 +1,4 @@
+//productosAdminApi.js
 const API_BASE_URL = "https://misdosreynas.com";
 
 async function request(path, options = {}) {

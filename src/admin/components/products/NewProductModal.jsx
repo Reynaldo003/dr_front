@@ -1,7 +1,6 @@
 //src/admin/component/products/NewProductModal.jsx
-import { useMemo, useState } from "react";
 import { X, Plus, Image as ImgIcon, Trash2, Check, Palette, Upload } from "lucide-react";
-
+import { useEffect, useMemo, useState } from "react";
 const DEFAULT_COLORS = [
   { name: "Negro", hex: "#111827" },
   { name: "Blanco", hex: "#F9FAFB" },
@@ -22,8 +21,19 @@ const DEFAULT_COLORS = [
   { name: "Naranja", hex: "#F97316" },
   { name: "Amarillo", hex: "#FACC15" },
 ];
+const PRODUCT_CATEGORIES = [
+  "Vestidos",
+  "Sets",
+  "Blusas",
+  "Pantalones",
+  "Shorts",
+  "Chamarras",
+  "Faldas",
+  "Sacos",
+  "Accesorios",
+];
 
-const DEFAULT_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "Unitalla"];
+const DEFAULT_SIZES = ["XS", "S", "SM", "M", "ML", "L", "LX", "XL", "XXL", "Unitalla"];
 
 function uid() {
   return Math.random().toString(16).slice(2) + Date.now().toString(16);
@@ -76,8 +86,7 @@ function StepPill({ active, done, children }) {
     </div>
   );
 }
-
-export default function NewProductModal({ open, onClose, onSave }) {
+export default function NewProductModal({ open, onClose, onSave, saving = false }) {
   const [step, setStep] = useState(1);
 
   const [title, setTitle] = useState("");
@@ -104,7 +113,22 @@ export default function NewProductModal({ open, onClose, onSave }) {
   const totalStock = useMemo(() => {
     return Object.values(stockMap).reduce((acc, v) => acc + (v || 0), 0);
   }, [stockMap]);
-
+  function resetForm() {
+    setStep(1);
+    setTitle("");
+    setSku("");
+    setPrice(399);
+    setCategory("Vestidos");
+    setStatus("Activo");
+    setHeroUrl("");
+    setGallery([]);
+    setColors(DEFAULT_COLORS);
+    setSelectedColorIds(DEFAULT_COLORS.slice(0, 2).map((c) => c.name));
+    setSelectedSizes(["S", "M", "L"]);
+    setStockMap({});
+    setCustomColorName("");
+    setCustomColorHex("#111827");
+  }
   const galleryPreview = useMemo(() => {
     const arr = [];
     if (heroUrl) arr.push({ id: "hero", url: heroUrl });
@@ -128,6 +152,12 @@ export default function NewProductModal({ open, onClose, onSave }) {
 
     e.target.value = "";
   }
+
+  useEffect(() => {
+    if (open) {
+      resetForm();
+    }
+  }, [open]);
 
   async function handleGalleryFilesChange(e) {
     const files = Array.from(e.target.files || []);
@@ -229,7 +259,9 @@ export default function NewProductModal({ open, onClose, onSave }) {
     });
   }
 
-  function handleSave() {
+  async function handleSave() {
+    if (saving) return;
+
     const payload = {
       title,
       sku,
@@ -246,11 +278,13 @@ export default function NewProductModal({ open, onClose, onSave }) {
       },
     };
 
-    onSave?.(payload);
-    onClose?.();
+    await onSave?.(payload);
+    resetForm();
   }
 
   function resetAndClose() {
+    if (saving) return;
+    resetForm();
     onClose?.();
   }
 
@@ -350,15 +384,11 @@ export default function NewProductModal({ open, onClose, onSave }) {
                           onChange={(e) => setCategory(e.target.value)}
                           className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm"
                         >
-                          <option>Vestidos</option>
-                          <option>Sets</option>
-                          <option>Blusas</option>
-                          <option>Pantalones</option>
-                          <option>Shorts</option>
-                          <option>Chamarras</option>
-                          <option>Faldas</option>
-                          <option>Sacos</option>
-                          <option>Accesorios</option>
+                          {PRODUCT_CATEGORIES.map((item) => (
+                            <option key={item} value={item}>
+                              {item}
+                            </option>
+                          ))}
                         </select>
                       </label>
 

@@ -4,7 +4,7 @@ import { Save, Trash2, X } from "lucide-react";
 
 const PRODUCT_CATEGORIES = [
   "Vestidos",
-  "Conjuntos",
+  "Sets",
   "Blusas",
   "Pantalones",
   "Shorts",
@@ -18,8 +18,7 @@ function limpiarNumero(valor) {
   const n = Number(valor);
   return Number.isFinite(n) ? n : 0;
 }
-
-export default function ProductEditModal({ open, product, onClose, onSave }) {
+export default function ProductEditModal({ open, product, onClose, onSave, loading = false }) {
   const [title, setTitle] = useState("");
   const [sku, setSku] = useState("");
   const [category, setCategory] = useState("");
@@ -155,7 +154,11 @@ export default function ProductEditModal({ open, product, onClose, onSave }) {
               <X size={18} />
             </button>
           </div>
-
+          {loading ? (
+            <div className="mx-4 mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700 sm:mx-6">
+              Cargando detalle del producto...
+            </div>
+          ) : null}
           <div className="flex-1 overflow-auto px-4 py-5 sm:px-6">
             <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
               <div className="space-y-4">
@@ -454,14 +457,20 @@ export default function ProductEditModal({ open, product, onClose, onSave }) {
           </div>
 
           <div className="flex flex-col justify-end gap-2 border-t px-4 py-3 sm:flex-row sm:px-6">
-            <button onClick={onClose} className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50">
+            <button disabled={saving} onClick={onClose} className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50">
               Cancelar
             </button>
             <button
               onClick={handleSave}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-sm text-white hover:opacity-95"
+              disabled={!title.trim() || totalStock === 0 || saving}
+              className={[
+                "rounded-xl px-4 py-2 text-sm",
+                title.trim() && totalStock > 0 && !saving
+                  ? "bg-zinc-900 text-white hover:opacity-95"
+                  : "bg-zinc-200 text-zinc-500 cursor-not-allowed",
+              ].join(" ")}
             >
-              <Save size={16} /> Guardar cambios
+              {saving ? "Guardando..." : "Guardar producto"}
             </button>
           </div>
         </div>
