@@ -1,3 +1,4 @@
+//public-site/components/CategoryStrip.jsx
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { obtenerCategoriasPublicas } from "../lib/apiPublic";

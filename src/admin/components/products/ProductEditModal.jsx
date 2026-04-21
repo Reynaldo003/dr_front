@@ -1,5 +1,18 @@
+//src/admin/component/products/ProductEditModal.jsx
 import { useEffect, useMemo, useState } from "react";
 import { Save, Trash2, X } from "lucide-react";
+
+const PRODUCT_CATEGORIES = [
+  "Vestidos",
+  "Conjuntos",
+  "Blusas",
+  "Pantalones",
+  "Shorts",
+  "Chamarras",
+  "Faldas",
+  "Sacos",
+  "Accesorios",
+];
 
 function limpiarNumero(valor) {
   const n = Number(valor);
@@ -29,12 +42,14 @@ export default function ProductEditModal({ open, product, onClose, onSave }) {
 
     setTitle(product.title || "");
     setSku(product.sku || "");
-    setCategory(product.category || "");
+    setCategory(product.category || "Vestidos");
     setDescription(product.description || "");
     setCost(Number(product.cost || 0));
     setPrice(Number(product.price || 0));
     setSalePrice(
-      product.salePrice !== null && product.salePrice !== undefined && product.salePrice !== ""
+      product.salePrice !== null &&
+        product.salePrice !== undefined &&
+        product.salePrice !== ""
         ? String(product.salePrice)
         : "",
     );
@@ -168,11 +183,17 @@ export default function ProductEditModal({ open, product, onClose, onSave }) {
 
                     <label className="block">
                       <span className="text-xs font-medium text-zinc-700">Categoría</span>
-                      <input
+                      <select
                         value={category}
                         onChange={(e) => setCategory(e.target.value)}
-                        className="mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-                      />
+                        className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                      >
+                        {PRODUCT_CATEGORIES.map((item) => (
+                          <option key={item} value={item}>
+                            {item}
+                          </option>
+                        ))}
+                      </select>
                     </label>
 
                     <label className="block">
@@ -335,7 +356,10 @@ export default function ProductEditModal({ open, product, onClose, onSave }) {
                         <tr>
                           <th className="px-4 py-3 text-left font-semibold text-zinc-700">Color</th>
                           {sizes.map((size) => (
-                            <th key={size} className="px-4 py-3 text-left font-semibold text-zinc-700">
+                            <th
+                              key={size}
+                              className="px-4 py-3 text-left font-semibold text-zinc-700"
+                            >
                               {size}
                             </th>
                           ))}
@@ -415,6 +439,10 @@ export default function ProductEditModal({ open, product, onClose, onSave }) {
                     <span className="font-semibold">
                       {salePrice === "" ? "—" : `$${limpiarNumero(salePrice).toLocaleString()}`}
                     </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-500">Categoría</span>
+                    <span className="font-semibold">{category || "—"}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-zinc-500">Stock total</span>

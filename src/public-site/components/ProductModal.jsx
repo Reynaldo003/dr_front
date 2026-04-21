@@ -1,3 +1,4 @@
+//public-site/components/ProductModal.jsx
 import {
   lazy,
   Suspense,

@@ -1,3 +1,4 @@
+//public-site/components/NewCollection.jsx
 import {
   lazy,
   Suspense,

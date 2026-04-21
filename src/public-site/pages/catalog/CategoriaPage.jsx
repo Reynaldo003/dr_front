@@ -1,3 +1,4 @@
+//src/public-site/pages/catalog/CategoriaPage.jsx
 import { useMemo } from "react";
 import { useParams } from "react-router-dom";
 import NewCollection from "../../components/NewCollection";

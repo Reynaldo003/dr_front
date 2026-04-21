@@ -14,6 +14,7 @@ async function request(path, options = {}) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
+    signal: options.signal,
   });
 
   if (response.status === 204) {
@@ -24,9 +25,9 @@ async function request(path, options = {}) {
   const contentType = response.headers.get("content-type") || "";
 
   if (contentType.includes("application/json")) {
-    data = await response.json();
+    data = await response.json().catch(() => ({}));
   } else {
-    const text = await response.text();
+    const text = await response.text().catch(() => "");
     data = text ? { detail: text } : null;
   }
 
@@ -41,18 +42,38 @@ async function request(path, options = {}) {
   return data;
 }
 
-export function obtenerProductos({ buscar = "", tipo = "" } = {}) {
+export function obtenerProductos(
+  {
+    buscar = "",
+    tipo = "",
+    categoria = "",
+    estado = "",
+    page = 1,
+    page_size = 40,
+  } = {},
+  options = {},
+) {
   const params = new URLSearchParams();
 
   if (buscar) params.set("buscar", buscar);
   if (tipo) params.set("tipo", tipo);
+  if (categoria) params.set("categoria", categoria);
+  if (estado) params.set("estado", estado);
+
+  params.set("page", String(page));
+  params.set("page_size", String(page_size));
 
   const query = params.toString();
-  return request(`/api/productos/${query ? `?${query}` : ""}`);
+
+  return request(`/api/productos/${query ? `?${query}` : ""}`, {
+    signal: options.signal,
+  });
 }
 
-export function obtenerProducto(id) {
-  return request(`/api/productos/${id}/`);
+export function obtenerProducto(id, options = {}) {
+  return request(`/api/productos/${id}/`, {
+    signal: options.signal,
+  });
 }
 
 export function crearProducto(payload) {

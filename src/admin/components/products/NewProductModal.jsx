@@ -351,9 +351,13 @@ export default function NewProductModal({ open, onClose, onSave }) {
                           className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm"
                         >
                           <option>Vestidos</option>
-                          <option>Conjuntos</option>
+                          <option>Sets</option>
                           <option>Blusas</option>
-                          <option>Jeans</option>
+                          <option>Pantalones</option>
+                          <option>Shorts</option>
+                          <option>Chamarras</option>
+                          <option>Faldas</option>
+                          <option>Sacos</option>
                           <option>Accesorios</option>
                         </select>
                       </label>

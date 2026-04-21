@@ -1,3 +1,4 @@
+//public-site/components/ProductGrid.jsx
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 
 const PRICE_FORMATTER = new Intl.NumberFormat("es-MX", {

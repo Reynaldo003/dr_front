@@ -1,3 +1,4 @@
+//public-site/lib/productosPublicApi.js
 const API_BASE_URL = "https://misdosreynas.com";
 const GET_CACHE_TTL = 5 * 60 * 1000;
 const CACHE_PREFIX = "public_shop_lists_cache_v2::";

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
 import NewProductModal from "../components/products/NewProductModal";
 import ProductViewModal from "../components/products/ProductViewModal";
 import ProductEditModal from "../components/products/ProductEditModal";
-import { Eye, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Eye, Pencil, Plus, Search, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   obtenerProducto,
   obtenerProductos,
@@ -12,6 +12,29 @@ import {
   actualizarProducto,
   eliminarProducto,
 } from "../lib/productosAdminApi";
+
+const PAGE_SIZE = 40;
+
+function useEsMobile() {
+  const [esMobile, setEsMobile] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.innerWidth < 768;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function onResize() {
+      setEsMobile(window.innerWidth < 768);
+    }
+
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  return esMobile;
+}
 
 function stockBadge(stock) {
   const s = Number(stock || 0);
@@ -29,8 +52,8 @@ function statusBadge(status) {
 }
 
 function toUiProduct(p) {
-  const variantes = Array.isArray(p.variantes) ? p.variantes : [];
-  const imagenes = Array.isArray(p.imagenes) ? p.imagenes : [];
+  const variantes = Array.isArray(p?.variantes) ? p.variantes : [];
+  const imagenes = Array.isArray(p?.imagenes) ? p.imagenes : [];
 
   const colors = [...new Set(variantes.map((v) => v.color).filter(Boolean))];
   const sizes = [...new Set(variantes.map((v) => v.talla).filter(Boolean))];
@@ -67,10 +90,10 @@ function toUiProduct(p) {
       stockMap,
       totalStock: Number(p.stock_total || 0),
       totalColors: Number(
-        p.total_colores !== undefined ? p.total_colores : colors.length
+        p.total_colores !== undefined ? p.total_colores : colors.length,
       ),
       totalSizes: Number(
-        p.total_tallas !== undefined ? p.total_tallas : sizes.length
+        p.total_tallas !== undefined ? p.total_tallas : sizes.length,
       ),
     },
   };
@@ -117,8 +140,22 @@ function toApiPayload(ui) {
 }
 
 export default function Productos() {
+  const esMobile = useEsMobile();
+
   const [products, setProducts] = useState([]);
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+
+  const [page, setPage] = useState(1);
+  const [pageInfo, setPageInfo] = useState({
+    count: 0,
+    page: 1,
+    pageSize: PAGE_SIZE,
+    pages: 1,
+    hasPrevious: false,
+    hasNext: false,
+  });
+
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
@@ -130,15 +167,79 @@ export default function Productos() {
   const [selected, setSelected] = useState(null);
 
   useEffect(() => {
-    cargarProductos();
-  }, []);
+    const timer = window.setTimeout(() => {
+      setDebouncedQ(q.trim());
+    }, 350);
 
-  async function cargarProductos() {
+    return () => window.clearTimeout(timer);
+  }, [q]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQ]);
+
+  const cargarProductos = useCallback(async () => {
+    const controller = new AbortController();
+
     try {
       setLoading(true);
       setError("");
-      const data = await obtenerProductos();
-      setProducts((data || []).map(toUiProduct));
+
+      const data = await obtenerProductos(
+        {
+          buscar: debouncedQ,
+          page,
+          page_size: PAGE_SIZE,
+        },
+        { signal: controller.signal },
+      );
+
+      const results = Array.isArray(data?.results) ? data.results : [];
+      setProducts(results.map(toUiProduct));
+      setPageInfo({
+        count: Number(data?.count || 0),
+        page: Number(data?.page || page),
+        pageSize: Number(data?.page_size || PAGE_SIZE),
+        pages: Number(data?.pages || 1),
+        hasPrevious: Boolean(data?.has_previous),
+        hasNext: Boolean(data?.has_next),
+      });
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+      setError("No se pudieron cargar los productos.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+
+    return () => controller.abort();
+  }, [debouncedQ, page]);
+
+  useEffect(() => {
+    cargarProductos();
+  }, [cargarProductos]);
+
+  async function recargarPaginaActual() {
+    try {
+      setLoading(true);
+      setError("");
+
+      const data = await obtenerProductos({
+        buscar: debouncedQ,
+        page,
+        page_size: PAGE_SIZE,
+      });
+
+      const results = Array.isArray(data?.results) ? data.results : [];
+      setProducts(results.map(toUiProduct));
+      setPageInfo({
+        count: Number(data?.count || 0),
+        page: Number(data?.page || page),
+        pageSize: Number(data?.page_size || PAGE_SIZE),
+        pages: Number(data?.pages || 1),
+        hasPrevious: Boolean(data?.has_previous),
+        hasNext: Boolean(data?.has_next),
+      });
     } catch (err) {
       setError("No se pudieron cargar los productos.");
       console.error(err);
@@ -146,19 +247,6 @@ export default function Productos() {
       setLoading(false);
     }
   }
-
-  const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    if (!query) return products;
-
-    return products.filter((p) => {
-      return (
-        String(p.id || "").toLowerCase().includes(query) ||
-        String(p.title || "").toLowerCase().includes(query) ||
-        String(p.sku || "").toLowerCase().includes(query)
-      );
-    });
-  }, [products, q]);
 
   async function handleOpenView(p) {
     try {
@@ -219,14 +307,13 @@ export default function Productos() {
         stockTotal,
       };
 
-      const creado = await crearProducto(toApiPayload(ui));
-      const productoUi = toUiProduct(creado);
-
-      setProducts((prev) => [productoUi, ...prev]);
+      await crearProducto(toApiPayload(ui));
       setOpenNew(false);
+      setPage(1);
+      await recargarPaginaActual();
     } catch (err) {
       console.error(err);
-      alert(err.message || "No se pudo guardar el producto. Revisa SKU y datos de rebaja.");
+      alert(err.message || "No se pudo guardar el producto.");
     } finally {
       setGuardando(false);
     }
@@ -266,9 +353,15 @@ export default function Productos() {
     try {
       await eliminarProducto(producto.apiId);
 
-      setProducts((prev) =>
-        prev.filter((item) => item.apiId !== producto.apiId),
-      );
+      const soloHabiaUno = products.length === 1;
+      const habiaPaginaAnterior = page > 1;
+
+      if (soloHabiaUno && habiaPaginaAnterior) {
+        setPage((prev) => prev - 1);
+        return;
+      }
+
+      await recargarPaginaActual();
 
       if (selected?.apiId === producto.apiId) {
         setSelected(null);
@@ -280,6 +373,8 @@ export default function Productos() {
       alert(err.message || "No se pudo eliminar el producto.");
     }
   }
+
+  const totalMostrado = useMemo(() => products.length, [products]);
 
   return (
     <div className="space-y-6 animate-fadeIn">
@@ -321,217 +416,226 @@ export default function Productos() {
           <div className="rounded-2xl border bg-red-50 p-6 text-sm text-red-700">
             {error}
           </div>
-        ) : (
-          <>
-            <div className="hidden md:block overflow-auto rounded-2xl border">
-              <table className="min-w-[1080px] w-full text-sm">
-                <thead className="bg-zinc-50">
-                  <tr>
-                    {["ID", "Producto", "Stock", "Precio", "Estado", "Acciones"].map(
-                      (h) => (
-                        <th
-                          key={h}
-                          className="text-left px-4 py-3 font-semibold text-zinc-700"
-                        >
-                          {h}
-                        </th>
-                      ),
+        ) : products.length === 0 ? (
+          <div className="rounded-2xl border bg-zinc-50 p-6 text-sm text-zinc-600">
+            No hay productos con ese filtro.
+          </div>
+        ) : esMobile ? (
+          <div className="space-y-3">
+            {products.map((p) => (
+              <div key={p.apiId} className="rounded-2xl border bg-white p-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-16 w-16 rounded-2xl border bg-zinc-100 overflow-hidden flex-none">
+                    {p.heroUrl ? (
+                      <img
+                        src={p.heroUrl}
+                        alt={p.title}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="h-full w-full grid place-items-center text-xs text-zinc-500">
+                        Sin foto
+                      </div>
                     )}
-                  </tr>
-                </thead>
+                  </div>
 
-                <tbody className="bg-white">
-                  {filtered.map((p) => (
-                    <tr
-                      key={p.apiId}
-                      className="border-t hover:bg-zinc-50 transition-colors"
-                    >
-                      <td className="px-4 py-3">{p.id}</td>
-
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="h-12 w-12 rounded-xl border bg-zinc-100 overflow-hidden flex-none">
-                            {p.heroUrl ? (
-                              <img
-                                src={p.heroUrl}
-                                alt={p.title}
-                                className="h-full w-full object-cover"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <div className="h-full w-full grid place-items-center text-[10px] text-zinc-500">
-                                Sin
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="min-w-0">
-                            <div className="font-semibold truncate">{p.title}</div>
-                            <div className="text-xs text-zinc-500 truncate">
-                              SKU: {p.sku}
-                            </div>
-                            <div className="text-[11px] text-zinc-500 truncate">
-                              {p.variants?.totalColors ?? 0} colores ·{" "}
-                              {p.variants?.totalSizes ?? 0} tallas
-                            </div>
-                          </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold truncate">{p.title}</div>
+                        <div className="text-xs text-zinc-500 truncate">
+                          {p.id} · SKU: {p.sku}
                         </div>
-                      </td>
-
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{p.stockTotal}</span>
-                          {stockBadge(p.stockTotal)}
+                        <div className="text-[11px] text-zinc-500 truncate mt-1">
+                          {p.variants?.totalColors ?? 0} colores ·{" "}
+                          {p.variants?.totalSizes ?? 0} tallas
                         </div>
-                      </td>
+                      </div>
+                      {statusBadge(p.status)}
+                    </div>
 
-                      <td className="px-4 py-3">
+                    <div className="mt-2 flex items-center justify-between">
+                      <div>
+                        <div className="text-xs text-zinc-500">Precio</div>
                         <div className="font-semibold">
                           ${Number(p.price).toLocaleString()}
                         </div>
+                      </div>
 
-                        {p.salePrice !== null ? (
-                          <div className="text-xs text-zinc-500">
-                            Rebaja: ${Number(p.salePrice).toLocaleString()}
-                          </div>
-                        ) : null}
-                      </td>
-
-                      <td className="px-4 py-3">{statusBadge(p.status)}</td>
-
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleOpenView(p)}
-                            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs hover:bg-zinc-50 active:scale-[0.98] transition"
-                          >
-                            <Eye size={14} /> Ver
-                          </button>
-
-                          <button
-                            onClick={() => handleOpenEdit(p)}
-                            className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 text-white px-3 py-2 text-xs hover:opacity-95 active:scale-[0.98] transition"
-                          >
-                            <Pencil size={14} /> Editar
-                          </button>
-
-                          <button
-                            onClick={() => handleDelete(p)}
-                            className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-3 py-2 text-xs text-red-600 hover:bg-red-50 active:scale-[0.98] transition"
-                          >
-                            <Trash2 size={14} /> Eliminar
-                          </button>
+                      <div className="text-right">
+                        <div className="text-xs text-zinc-500">Stock</div>
+                        <div className="flex items-center gap-2 justify-end">
+                          <span className="font-semibold">{p.stockTotal}</span>
+                          {stockBadge(p.stockTotal)}
                         </div>
-                      </td>
-                    </tr>
-                  ))}
-
-                  {filtered.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="px-4 py-10 text-center text-sm text-zinc-600"
-                      >
-                        No hay productos con ese filtro.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="md:hidden space-y-3">
-              {filtered.map((p) => (
-                <div key={p.apiId} className="rounded-2xl border bg-white p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="h-16 w-16 rounded-2xl border bg-zinc-100 overflow-hidden flex-none">
-                      {p.heroUrl ? (
-                        <img
-                          src={p.heroUrl}
-                          alt={p.title}
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="h-full w-full grid place-items-center text-xs text-zinc-500">
-                          Sin foto
-                        </div>
-                      )}
+                      </div>
                     </div>
 
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      <button
+                        onClick={() => handleOpenView(p)}
+                        className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50 active:scale-[0.98] transition"
+                      >
+                        Ver
+                      </button>
+
+                      <button
+                        onClick={() => handleOpenEdit(p)}
+                        className="rounded-xl bg-zinc-900 text-white px-4 py-2 text-sm hover:opacity-95 active:scale-[0.98] transition"
+                      >
+                        Editar
+                      </button>
+
+                      <button
+                        onClick={() => handleDelete(p)}
+                        className="rounded-xl border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 active:scale-[0.98] transition"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="overflow-auto rounded-2xl border">
+            <table className="min-w-[1080px] w-full text-sm">
+              <thead className="bg-zinc-50">
+                <tr>
+                  {["ID", "Producto", "Stock", "Precio", "Estado", "Acciones"].map(
+                    (h) => (
+                      <th
+                        key={h}
+                        className="text-left px-4 py-3 font-semibold text-zinc-700"
+                      >
+                        {h}
+                      </th>
+                    ),
+                  )}
+                </tr>
+              </thead>
+
+              <tbody className="bg-white">
+                {products.map((p) => (
+                  <tr
+                    key={p.apiId}
+                    className="border-t hover:bg-zinc-50 transition-colors"
+                  >
+                    <td className="px-4 py-3">{p.id}</td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-12 w-12 rounded-xl border bg-zinc-100 overflow-hidden flex-none">
+                          {p.heroUrl ? (
+                            <img
+                              src={p.heroUrl}
+                              alt={p.title}
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="h-full w-full grid place-items-center text-[10px] text-zinc-500">
+                              Sin
+                            </div>
+                          )}
+                        </div>
+
                         <div className="min-w-0">
                           <div className="font-semibold truncate">{p.title}</div>
                           <div className="text-xs text-zinc-500 truncate">
-                            {p.id} · SKU: {p.sku}
+                            SKU: {p.sku}
                           </div>
-                          <div className="text-[11px] text-zinc-500 truncate mt-1">
+                          <div className="text-[11px] text-zinc-500 truncate">
                             {p.variants?.totalColors ?? 0} colores ·{" "}
                             {p.variants?.totalSizes ?? 0} tallas
                           </div>
                         </div>
-                        {statusBadge(p.status)}
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{p.stockTotal}</span>
+                        {stockBadge(p.stockTotal)}
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <div className="font-semibold">
+                        ${Number(p.price).toLocaleString()}
                       </div>
 
-                      <div className="mt-2 flex items-center justify-between">
-                        <div>
-                          <div className="text-xs text-zinc-500">Precio</div>
-                          <div className="font-semibold">
-                            ${Number(p.price).toLocaleString()}
-                          </div>
+                      {p.salePrice !== null ? (
+                        <div className="text-xs text-zinc-500">
+                          Rebaja: ${Number(p.salePrice).toLocaleString()}
                         </div>
+                      ) : null}
+                    </td>
 
-                        <div className="text-right">
-                          <div className="text-xs text-zinc-500">Stock</div>
-                          <div className="flex items-center gap-2 justify-end">
-                            <span className="font-semibold">{p.stockTotal}</span>
-                            {stockBadge(p.stockTotal)}
-                          </div>
-                        </div>
-                      </div>
+                    <td className="px-4 py-3">{statusBadge(p.status)}</td>
 
-                      <div className="mt-3 grid grid-cols-3 gap-2">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
                         <button
                           onClick={() => handleOpenView(p)}
-                          className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50 active:scale-[0.98] transition"
+                          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs hover:bg-zinc-50 active:scale-[0.98] transition"
                         >
-                          Ver
+                          <Eye size={14} /> Ver
                         </button>
 
                         <button
                           onClick={() => handleOpenEdit(p)}
-                          className="rounded-xl bg-zinc-900 text-white px-4 py-2 text-sm hover:opacity-95 active:scale-[0.98] transition"
+                          className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 text-white px-3 py-2 text-xs hover:opacity-95 active:scale-[0.98] transition"
                         >
-                          Editar
+                          <Pencil size={14} /> Editar
                         </button>
 
                         <button
                           onClick={() => handleDelete(p)}
-                          className="rounded-xl border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 active:scale-[0.98] transition"
+                          className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-3 py-2 text-xs text-red-600 hover:bg-red-50 active:scale-[0.98] transition"
                         >
-                          Eliminar
+                          <Trash2 size={14} /> Eliminar
                         </button>
                       </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {filtered.length === 0 && (
-                <div className="rounded-2xl border bg-zinc-50 p-4 text-sm text-zinc-600">
-                  No hay productos con ese filtro.
-                </div>
-              )}
-            </div>
-          </>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
-        <div className="mt-4 text-xs text-zinc-500 flex items-center justify-between gap-2">
-          <div>Total: {filtered.length} productos</div>
-          <div className="flex items-center gap-3">
-            {cargandoDetalle ? <div>Cargando detalle...</div> : null}
-            {guardando ? <div>Guardando cambios...</div> : null}
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-xs text-zinc-500 flex items-center gap-3">
+            <span>Total general: {pageInfo.count}</span>
+            <span>Mostrando: {totalMostrado}</span>
+            <span>
+              Página {pageInfo.page} de {pageInfo.pages}
+            </span>
+            {cargandoDetalle ? <span>Cargando detalle...</span> : null}
+            {guardando ? <span>Guardando cambios...</span> : null}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              disabled={!pageInfo.hasPrevious || loading}
+              className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft size={16} />
+              Anterior
+            </button>
+
+            <button
+              onClick={() => setPage((prev) => prev + 1)}
+              disabled={!pageInfo.hasNext || loading}
+              className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Siguiente
+              <ChevronRight size={16} />
+            </button>
           </div>
         </div>
       </Card>
