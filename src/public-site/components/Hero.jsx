@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import heroVideo from "../public/videos/hero-boutique.mp4";
 
 const TITULO = "WELCOME TO YOUR FAVORITE PLACE";
-const SUBTITULO = "Welcome Your Favorite Place!";
+const SUBTITULO = "Bienvenida a tu lugar favorito!";
 
 export default function Hero() {
   const [tituloVisible, setTituloVisible] = useState("");

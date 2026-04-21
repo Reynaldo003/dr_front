@@ -1,12 +1,33 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useCart } from "../context/cart";
-import Reviews from "./Reviews";
+
+const Reviews = lazy(() => import("./Reviews"));
+
+const PRICE_FORMATTER = new Intl.NumberFormat("es-MX", {
+  style: "currency",
+  currency: "MXN",
+});
 
 function buildVariantKey(color = "", talla = "") {
   return `${String(color).trim()}__${String(talla).trim()}`;
 }
 
-export default function ProductModal({ open, product, onClose, onAddToCart }) {
+export default function ProductModal({
+  open,
+  product,
+  onClose,
+  onAddToCart,
+  loading = false,
+  error = "",
+}) {
   const [imgIndex, setImgIndex] = useState(0);
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
@@ -21,9 +42,10 @@ export default function ProductModal({ open, product, onClose, onAddToCart }) {
   const sizes = useMemo(() => product?.sizes ?? [], [product]);
   const variantStockMap = useMemo(() => product?.variantStockMap ?? {}, [product]);
 
-  const getStock = (color, size) => {
-    return Number(variantStockMap[buildVariantKey(color, size)] || 0);
-  };
+  const getStock = useCallback(
+    (color, size) => Number(variantStockMap[buildVariantKey(color, size)] || 0),
+    [variantStockMap],
+  );
 
   const colorStockMap = useMemo(() => {
     const result = {};
@@ -35,12 +57,24 @@ export default function ProductModal({ open, product, onClose, onAddToCart }) {
     });
 
     return result;
-  }, [colors, sizes, variantStockMap]);
+  }, [colors, sizes, getStock]);
 
   const selectedVariantStock = useMemo(() => {
     if (!selectedColor || !selectedSize) return 0;
     return getStock(selectedColor, selectedSize);
-  }, [selectedColor, selectedSize, variantStockMap]);
+  }, [selectedColor, selectedSize, getStock]);
+
+  const next = useCallback(() => {
+    if (!images.length) return;
+    setZoom(false);
+    setImgIndex((i) => (i + 1) % images.length);
+  }, [images.length]);
+
+  const prev = useCallback(() => {
+    if (!images.length) return;
+    setZoom(false);
+    setImgIndex((i) => (i - 1 + images.length) % images.length);
+  }, [images.length]);
 
   useEffect(() => {
     if (!open || !product) return;
@@ -61,7 +95,7 @@ export default function ProductModal({ open, product, onClose, onAddToCart }) {
     } else {
       setSelectedSize(null);
     }
-  }, [open, product, colors, sizes, colorStockMap]);
+  }, [open, product, colors, sizes, colorStockMap, getStock]);
 
   useEffect(() => {
     if (!open || !selectedColor) return;
@@ -77,7 +111,7 @@ export default function ProductModal({ open, product, onClose, onAddToCart }) {
 
     setSelectedSize(primeraTallaDisponible);
     setQty(1);
-  }, [open, selectedColor, selectedSize, sizes, variantStockMap]);
+  }, [open, selectedColor, selectedSize, sizes, getStock]);
 
   useEffect(() => {
     if (!open) return;
@@ -103,48 +137,37 @@ export default function ProductModal({ open, product, onClose, onAddToCart }) {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, imgIndex, images.length, onClose]);
+  }, [open, onClose, next, prev]);
+
+  const handleTouchStart = useCallback((e) => {
+    startX.current = e.touches?.[0]?.clientX ?? null;
+  }, []);
+
+  const handleTouchEnd = useCallback(
+    (e) => {
+      const endX = e.changedTouches?.[0]?.clientX ?? null;
+      if (startX.current == null || endX == null) return;
+
+      const delta = endX - startX.current;
+      if (Math.abs(delta) < 40) return;
+
+      if (delta < 0) next();
+      else prev();
+    },
+    [next, prev],
+  );
 
   if (!open || !product) return null;
 
-  const next = () => {
-    if (!images.length) return;
-    setZoom(false);
-    setImgIndex((i) => (i + 1) % images.length);
-  };
-
-  const prev = () => {
-    if (!images.length) return;
-    setZoom(false);
-    setImgIndex((i) => (i - 1 + images.length) % images.length);
-  };
-
-  const handleTouchStart = (e) => {
-    startX.current = e.touches?.[0]?.clientX ?? null;
-  };
-
-  const handleTouchEnd = (e) => {
-    const endX = e.changedTouches?.[0]?.clientX ?? null;
-    if (startX.current == null || endX == null) return;
-
-    const delta = endX - startX.current;
-    if (Math.abs(delta) < 40) return;
-
-    if (delta < 0) next();
-    else prev();
-  };
-
-  const fmt = (n) =>
-    new Intl.NumberFormat("es-MX", {
-      style: "currency",
-      currency: "MXN",
-    }).format(Number(n || 0));
-
   const currentImage = images[imgIndex];
   const puedeAgregar =
+    !loading &&
+    !error &&
     Boolean(selectedColor) &&
     Boolean(selectedSize) &&
     Number(selectedVariantStock || 0) > 0;
+
+  const fmt = (n) => PRICE_FORMATTER.format(Number(n || 0));
 
   return (
     <div className="fixed inset-0 z-[999]">
@@ -185,6 +208,9 @@ export default function ProductModal({ open, product, onClose, onAddToCart }) {
                     <img
                       src={currentImage}
                       alt={product.name}
+                      loading={imgIndex === 0 ? "eager" : "lazy"}
+                      fetchPriority={imgIndex === 0 ? "high" : "auto"}
+                      decoding="async"
                       className={[
                         "h-full w-full select-none object-contain transition-transform duration-200",
                         zoom ? "scale-110 cursor-zoom-out" : "cursor-zoom-in",
@@ -199,7 +225,7 @@ export default function ProductModal({ open, product, onClose, onAddToCart }) {
                   )}
                 </div>
 
-                {images.length > 1 && (
+                {images.length > 1 ? (
                   <>
                     <button
                       onClick={prev}
@@ -214,10 +240,10 @@ export default function ProductModal({ open, product, onClose, onAddToCart }) {
                       ›
                     </button>
                   </>
-                )}
+                ) : null}
               </div>
 
-              {images.length > 1 && (
+              {images.length > 1 ? (
                 <div className="mt-4 flex gap-3 overflow-x-auto pb-1">
                   {images.map((src, idx) => (
                     <button
@@ -227,20 +253,22 @@ export default function ProductModal({ open, product, onClose, onAddToCart }) {
                         setImgIndex(idx);
                       }}
                       className={[
-                        "shrink-0 rounded-xl overflow-hidden border",
+                        "shrink-0 overflow-hidden rounded-xl border",
                         idx === imgIndex ? "border-black" : "border-transparent",
                       ].join(" ")}
                     >
                       <img
                         src={src}
                         alt={`${product.name} ${idx + 1}`}
+                        loading="lazy"
+                        decoding="async"
                         className="h-16 w-16 object-cover"
                         draggable={false}
                       />
                     </button>
                   ))}
                 </div>
-              )}
+              ) : null}
             </div>
 
             <div className="overflow-y-auto p-4 sm:p-6">
@@ -256,133 +284,155 @@ export default function ProductModal({ open, product, onClose, onAddToCart }) {
 
               <p className="mt-2 text-gray-600">{product.description}</p>
 
-              <div className="mt-6">
-                <div className="text-sm font-semibold">Color</div>
-
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {colors.map((c) => {
-                    const active = selectedColor === c.name;
-                    const sinStockColor = Number(colorStockMap[c.name] || 0) <= 0;
-
-                    return (
-                      <button
-                        key={c.name}
-                        type="button"
-                        onClick={() => {
-                          if (sinStockColor) return;
-                          setSelectedColor(c.name);
-                        }}
-                        disabled={sinStockColor}
-                        className={[
-                          "flex items-center gap-2 rounded-full border px-4 py-2 text-sm",
-                          active ? "border-black" : "border-gray-200",
-                          sinStockColor ? "cursor-not-allowed opacity-40" : "",
-                        ].join(" ")}
-                      >
-                        <span
-                          className="h-4 w-4 rounded-full border"
-                          style={{ background: c.hex }}
-                        />
-                        {c.name}
-                      </button>
-                    );
-                  })}
+              {loading ? (
+                <div className="mt-6 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+                  Cargando detalle del producto...
                 </div>
-              </div>
+              ) : null}
 
-              <div className="mt-6">
-                <div className="text-sm font-semibold">Talla</div>
-
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {sizes.map((s) => {
-                    const active = selectedSize === s;
-                    const stock = selectedColor ? getStock(selectedColor, s) : 0;
-                    const agotada = stock <= 0;
-
-                    return (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => {
-                          if (agotada) return;
-                          setSelectedSize(s);
-                        }}
-                        disabled={agotada}
-                        className={[
-                          "h-11 w-16 rounded-full border text-sm font-semibold",
-                          active
-                            ? "border-black bg-black text-white"
-                            : "border-gray-200 bg-white",
-                          agotada ? "cursor-not-allowed opacity-40 line-through" : "",
-                        ].join(" ")}
-                      >
-                        {s}
-                      </button>
-                    );
-                  })}
+              {error ? (
+                <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+                  {error}
                 </div>
+              ) : null}
 
-                <div className="mt-3 text-sm text-gray-500">
-                  {selectedVariantStock > 0
-                    ? `Disponibles: ${selectedVariantStock}`
-                    : "Talla agotada"}
-                </div>
-              </div>
+              {!loading && !error ? (
+                <>
+                  <div className="mt-6">
+                    <div className="text-sm font-semibold">Color</div>
 
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="flex w-fit items-center overflow-hidden rounded-full border border-gray-200">
-                  <button
-                    className="h-11 w-12 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    onClick={() => setQty((q) => Math.max(1, q - 1))}
-                    disabled={!puedeAgregar}
-                  >
-                    –
-                  </button>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {colors.map((c) => {
+                        const active = selectedColor === c.name;
+                        const sinStockColor = Number(colorStockMap[c.name] || 0) <= 0;
 
-                  <div className="flex h-11 w-14 items-center justify-center font-semibold">
-                    {qty}
+                        return (
+                          <button
+                            key={c.name}
+                            type="button"
+                            onClick={() => {
+                              if (sinStockColor) return;
+                              setSelectedColor(c.name);
+                            }}
+                            disabled={sinStockColor}
+                            className={[
+                              "flex items-center gap-2 rounded-full border px-4 py-2 text-sm",
+                              active ? "border-black" : "border-gray-200",
+                              sinStockColor ? "cursor-not-allowed opacity-40" : "",
+                            ].join(" ")}
+                          >
+                            <span
+                              className="h-4 w-4 rounded-full border"
+                              style={{ background: c.hex }}
+                            />
+                            {c.name}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  <button
-                    className="h-11 w-12 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-                    onClick={() =>
-                      setQty((q) => Math.min(selectedVariantStock, q + 1))
-                    }
-                    disabled={!puedeAgregar || qty >= selectedVariantStock}
-                  >
-                    +
-                  </button>
-                </div>
+                  <div className="mt-6">
+                    <div className="text-sm font-semibold">Talla</div>
 
-                <button
-                  className="h-12 flex-1 rounded-full bg-black font-bold text-white shadow-lg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={!puedeAgregar}
-                  onClick={() => {
-                    if (!puedeAgregar) return;
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {sizes.map((s) => {
+                        const active = selectedSize === s;
+                        const stock = selectedColor ? getStock(selectedColor, s) : 0;
+                        const agotada = stock <= 0;
 
-                    const colorObj =
-                      colors.find((c) => c.name === selectedColor) ?? null;
+                        return (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => {
+                              if (agotada) return;
+                              setSelectedSize(s);
+                            }}
+                            disabled={agotada}
+                            className={[
+                              "h-11 w-16 rounded-full border text-sm font-semibold",
+                              active
+                                ? "border-black bg-black text-white"
+                                : "border-gray-200 bg-white",
+                              agotada ? "cursor-not-allowed opacity-40 line-through" : "",
+                            ].join(" ")}
+                          >
+                            {s}
+                          </button>
+                        );
+                      })}
+                    </div>
 
-                    addItem({
-                      productId: product.id,
-                      product,
-                      qty,
-                      color: colorObj,
-                      size: selectedSize,
-                      maxStock: selectedVariantStock,
-                    });
+                    <div className="mt-3 text-sm text-gray-500">
+                      {selectedVariantStock > 0
+                        ? `Disponibles: ${selectedVariantStock}`
+                        : "Talla agotada"}
+                    </div>
+                  </div>
 
-                    onAddToCart?.();
-                    onClose?.();
-                  }}
-                >
-                  {puedeAgregar ? "AGREGAR A CARRITO" : "NO DISPONIBLE"}
-                </button>
-              </div>
+                  <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div className="flex w-fit items-center overflow-hidden rounded-full border border-gray-200">
+                      <button
+                        className="h-11 w-12 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() => setQty((q) => Math.max(1, q - 1))}
+                        disabled={!puedeAgregar}
+                      >
+                        –
+                      </button>
 
-              <div className="mt-8 border-t pt-6">
-                <Reviews productId={product.id} productName={product.name} compact />
-              </div>
+                      <div className="flex h-11 w-14 items-center justify-center font-semibold">
+                        {qty}
+                      </div>
+
+                      <button
+                        className="h-11 w-12 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        onClick={() =>
+                          setQty((q) => Math.min(selectedVariantStock, q + 1))
+                        }
+                        disabled={!puedeAgregar || qty >= selectedVariantStock}
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    <button
+                      className="h-12 flex-1 rounded-full bg-black font-bold text-white shadow-lg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!puedeAgregar}
+                      onClick={() => {
+                        if (!puedeAgregar) return;
+
+                        const colorObj =
+                          colors.find((c) => c.name === selectedColor) ?? null;
+
+                        addItem({
+                          productId: product.id,
+                          product,
+                          qty,
+                          color: colorObj,
+                          size: selectedSize,
+                          maxStock: selectedVariantStock,
+                        });
+
+                        onAddToCart?.();
+                        onClose?.();
+                      }}
+                    >
+                      {puedeAgregar ? "AGREGAR A CARRITO" : "NO DISPONIBLE"}
+                    </button>
+                  </div>
+
+                  <div className="mt-8 border-t pt-6">
+                    <Suspense fallback={null}>
+                      <Reviews
+                        productId={product.id}
+                        productName={product.name}
+                        compact
+                      />
+                    </Suspense>
+                  </div>
+                </>
+              ) : null}
             </div>
           </div>
         </div>

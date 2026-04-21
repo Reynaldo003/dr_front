@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { Route, Routes } from "react-router-dom";
 
 import "./App.css";
@@ -7,52 +7,58 @@ import PageShell from "./pages/PageShell";
 // Home
 import Hero from "./components/Hero";
 import NewCollection from "./components/NewCollection";
-import CategoryStrip from "./components/CategoryStrip";
-import HowItWorks from "./components/HowItWorks";
-import Reviews from "./components/Reviews";
-import InstagramStrip from "./components/InstagramStrip";
-import Stores from "./components/Stores";
 
-// Pages
-import AboutPage from "./pages/about/AboutPage";
-import ShowroomPage from "./pages/about/ShowroomPage";
-import BlogPage from "./pages/about/BlogPage";
+// Home secciones lazy
+const CategoryStrip = lazy(() => import("./components/CategoryStrip"));
+const HowItWorks = lazy(() => import("./components/HowItWorks"));
+const Reviews = lazy(() => import("./components/Reviews"));
+const InstagramStrip = lazy(() => import("./components/InstagramStrip"));
+const Stores = lazy(() => import("./components/Stores"));
 
-import HelpReturns from "./pages/help/HelpReturns";
-import HelpShipping from "./pages/help/HelpShipping";
-import HelpTrack from "./pages/help/HelpTrack";
-import HelpFAQ from "./pages/help/HelpFAQ";
-import HelpBilling from "./pages/help/HelpBilling";
-import HelpContact from "./pages/help/HelpContact";
+// Pages lazy
+const AboutPage = lazy(() => import("./pages/about/AboutPage"));
+const ShowroomPage = lazy(() => import("./pages/about/ShowroomPage"));
+const BlogPage = lazy(() => import("./pages/about/BlogPage"));
 
-import CheckoutPage from "./pages/checkout/CheckoutPage";
-import CheckoutSuccess from "./pages/checkout/CheckoutSuccess";
-import CheckoutPending from "./pages/checkout/CheckoutPending";
-import CheckoutFailure from "./pages/checkout/CheckoutFailure";
+const HelpReturns = lazy(() => import("./pages/help/HelpReturns"));
+const HelpShipping = lazy(() => import("./pages/help/HelpShipping"));
+const HelpTrack = lazy(() => import("./pages/help/HelpTrack"));
+const HelpFAQ = lazy(() => import("./pages/help/HelpFAQ"));
+const HelpBilling = lazy(() => import("./pages/help/HelpBilling"));
+const HelpContact = lazy(() => import("./pages/help/HelpContact"));
 
-import NotFound from "./pages/NotFound";
+const CheckoutPage = lazy(() => import("./pages/checkout/CheckoutPage"));
+const CheckoutSuccess = lazy(() => import("./pages/checkout/CheckoutSuccess"));
+const CheckoutPending = lazy(() => import("./pages/checkout/CheckoutPending"));
+const CheckoutFailure = lazy(() => import("./pages/checkout/CheckoutFailure"));
 
-import AccountOrders from "./pages/account/AccountOrders";
-import AccountHome from "./pages/account/AccountHome";
-import AccountAddresses from "./pages/account/AccountAddresses";
-import AccountContact from "./pages/account/AccountContact";
-import AccountAccessPage from "./pages/account/AccountAccessPage";
+const NotFound = lazy(() => import("./pages/NotFound"));
 
-import CategoriaPage from "./pages/catalog/CategoriaPage";
-import RebajasPage from "./pages/shop/RebajasPage";
-import NewArrivalsPage from "./pages/shop/NewArrivalsPage";
-import ProtectedRoute from "../auth/ProtectedRoute.jsx";
+const AccountOrders = lazy(() => import("./pages/account/AccountOrders"));
+const AccountHome = lazy(() => import("./pages/account/AccountHome"));
+const AccountAddresses = lazy(() => import("./pages/account/AccountAddresses"));
+const AccountContact = lazy(() => import("./pages/account/AccountContact"));
+const AccountAccessPage = lazy(() => import("./pages/account/AccountAccessPage"));
+
+const CategoriaPage = lazy(() => import("./pages/catalog/CategoriaPage"));
+const RebajasPage = lazy(() => import("./pages/shop/RebajasPage"));
+const NewArrivalsPage = lazy(() => import("./pages/shop/NewArrivalsPage"));
+
+const ProtectedRoute = lazy(() => import("../auth/ProtectedRoute.jsx"));
 
 function HomePage({ onAddToCart }) {
   return (
     <main>
       <Hero />
       <NewCollection onAddToCart={onAddToCart} />
-      <CategoryStrip />
-      <HowItWorks />
-      <Reviews />
-      <InstagramStrip />
-      <Stores />
+
+      <Suspense fallback={null}>
+        <CategoryStrip />
+        <HowItWorks />
+        <Reviews />
+        <InstagramStrip />
+        <Stores />
+      </Suspense>
     </main>
   );
 }
@@ -61,103 +67,105 @@ export default function PublicRoutes() {
   const [cartOpen, setCartOpen] = useState(false);
 
   return (
-    <Routes>
-      <Route
-        element={
-          <PageShell
-            cartOpen={cartOpen}
-            onOpenCart={() => setCartOpen(true)}
-            onCloseCart={() => setCartOpen(false)}
+    <Suspense fallback={null}>
+      <Routes>
+        <Route
+          element={
+            <PageShell
+              cartOpen={cartOpen}
+              onOpenCart={() => setCartOpen(true)}
+              onCloseCart={() => setCartOpen(false)}
+            />
+          }
+        >
+          <Route
+            index
+            element={<HomePage onAddToCart={() => setCartOpen(true)} />}
           />
-        }
-      >
-        <Route
-          index
-          element={<HomePage onAddToCart={() => setCartOpen(true)} />}
-        />
 
-        <Route path="new-arrivals" element={<NewArrivalsPage />} />
-        <Route path="rebajas" element={<RebajasPage />} />
+          <Route path="new-arrivals" element={<NewArrivalsPage />} />
+          <Route path="rebajas" element={<RebajasPage />} />
 
-        <Route path="about" element={<AboutPage />} />
-        <Route path="about/showroom" element={<ShowroomPage />} />
-        <Route path="about/blog" element={<BlogPage />} />
+          <Route path="about" element={<AboutPage />} />
+          <Route path="about/showroom" element={<ShowroomPage />} />
+          <Route path="about/blog" element={<BlogPage />} />
 
-        <Route path="help/returns" element={<HelpReturns />} />
-        <Route path="help/shipping" element={<HelpShipping />} />
-        <Route path="help/tracking" element={<HelpTrack />} />
-        <Route path="help/faq" element={<HelpFAQ />} />
-        <Route path="help/billing" element={<HelpBilling />} />
-        <Route path="help/contact" element={<HelpContact />} />
+          <Route path="help/returns" element={<HelpReturns />} />
+          <Route path="help/shipping" element={<HelpShipping />} />
+          <Route path="help/tracking" element={<HelpTrack />} />
+          <Route path="help/faq" element={<HelpFAQ />} />
+          <Route path="help/billing" element={<HelpBilling />} />
+          <Route path="help/contact" element={<HelpContact />} />
 
-        <Route path="catalogo/:categoriaSlug" element={<CategoriaPage />} />
+          <Route path="catalogo/:categoriaSlug" element={<CategoriaPage />} />
 
-        <Route path="account/access" element={<AccountAccessPage />} />
+          <Route path="account/access" element={<AccountAccessPage />} />
 
-        <Route
-          path="account"
-          element={
-            <ProtectedRoute mode="cliente">
-              <AccountHome />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="account"
+            element={
+              <ProtectedRoute mode="cliente">
+                <AccountHome />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="account/orders"
-          element={
-            <ProtectedRoute mode="cliente">
-              <AccountOrders />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="account/orders"
+            element={
+              <ProtectedRoute mode="cliente">
+                <AccountOrders />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="account/orders/:id"
-          element={
-            <ProtectedRoute mode="cliente">
-              <div className="max-w-3xl mx-auto p-4 text-left">
-                <h1 className="text-2xl font-extrabold">Detalle del pedido</h1>
-                <p className="mt-1 text-black/60">
-                  Aquí después puedes mostrar el resumen completo del pedido.
-                </p>
-              </div>
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="account/orders/:id"
+            element={
+              <ProtectedRoute mode="cliente">
+                <div className="mx-auto max-w-3xl p-4 text-left">
+                  <h1 className="text-2xl font-extrabold">Detalle del pedido</h1>
+                  <p className="mt-1 text-black/60">
+                    Aquí después puedes mostrar el resumen completo del pedido.
+                  </p>
+                </div>
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="account/addresses"
-          element={
-            <ProtectedRoute mode="cliente">
-              <AccountAddresses />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="account/addresses"
+            element={
+              <ProtectedRoute mode="cliente">
+                <AccountAddresses />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="account/contact"
-          element={
-            <ProtectedRoute mode="cliente">
-              <AccountContact />
-            </ProtectedRoute>
-          }
-        />
+          <Route
+            path="account/contact"
+            element={
+              <ProtectedRoute mode="cliente">
+                <AccountContact />
+              </ProtectedRoute>
+            }
+          />
 
-        <Route
-          path="checkout"
-          element={
-            <ProtectedRoute mode="cliente">
-              <CheckoutPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="checkout/success" element={<CheckoutSuccess />} />
-        <Route path="checkout/pending" element={<CheckoutPending />} />
-        <Route path="checkout/failure" element={<CheckoutFailure />} />
+          <Route
+            path="checkout"
+            element={
+              <ProtectedRoute mode="cliente">
+                <CheckoutPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="checkout/success" element={<CheckoutSuccess />} />
+          <Route path="checkout/pending" element={<CheckoutPending />} />
+          <Route path="checkout/failure" element={<CheckoutFailure />} />
 
-        <Route path="*" element={<NotFound />} />
-      </Route>
-    </Routes>
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
+    </Suspense>
   );
 }

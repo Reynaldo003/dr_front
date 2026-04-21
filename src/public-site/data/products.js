@@ -1,4 +1,4 @@
-// src/data/products.js
+// public-site/data/products.js
 import p1 from "../assets/products/p1.png";
 import p1_p1 from "../assets/products/p1_p1.png";
 import p2 from "../assets/products/p2.png";

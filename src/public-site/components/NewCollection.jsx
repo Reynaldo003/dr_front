@@ -1,39 +1,106 @@
-//src/public-site/components/NewCollection.jsx
-import { useEffect, useMemo, useState } from "react";
-import { obtenerProductosPublicos } from "../lib/apiPublic";
-import { adaptarProductoBackend } from "../lib/productAdapters";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  leerDetalleProductoPublicoCache,
+  leerProductosPublicosCache,
+  obtenerDetalleProductoPublico,
+  obtenerProductosPublicos,
+} from "../lib/apiPublic";
+import {
+  adaptarProductoBackend,
+  adaptarProductoListadoBackend,
+} from "../lib/productAdapters";
 import ProductGrid from "./ProductGrid";
-import ProductModal from "./ProductModal";
 
-export default function NewCollection({ onAddToCart, categoria = "" }) {
+const ProductModal = lazy(() => import("./ProductModal"));
+
+const PAGE_SIZE = 24;
+
+export default function NewCollection({
+  onAddToCart,
+  categoria = "",
+  categoriaKey = "",
+}) {
   const [items, setItems] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
   const [selected, setSelected] = useState(null);
   const [open, setOpen] = useState(false);
+  const [cargandoDetalle, setCargandoDetalle] = useState(false);
+  const [errorDetalle, setErrorDetalle] = useState("");
+
+  const detalleAbortRef = useRef(null);
+
+  const params = useMemo(
+    () => ({
+      ...(categoria ? { categoria } : {}),
+      solo_disponibles: true,
+      page: 1,
+      page_size: PAGE_SIZE,
+    }),
+    [categoria],
+  );
+
+  useEffect(() => {
+    if (detalleAbortRef.current) {
+      detalleAbortRef.current.abort();
+      detalleAbortRef.current = null;
+    }
+
+    setOpen(false);
+    setSelected(null);
+    setCargandoDetalle(false);
+    setErrorDetalle("");
+  }, [categoriaKey, categoria]);
 
   useEffect(() => {
     let activo = true;
+    const controller = new AbortController();
+
+    const cacheApi = leerProductosPublicosCache(params);
+    const itemsDesdeCache = Array.isArray(cacheApi)
+      ? cacheApi.map(adaptarProductoListadoBackend)
+      : [];
+
+    if (itemsDesdeCache.length > 0) {
+      setItems(itemsDesdeCache);
+      setCargando(false);
+      setError("");
+    } else {
+      setCargando(true);
+      setError("");
+    }
 
     async function cargar() {
       try {
-        setCargando(true);
-        setError("");
-
-        const data = await obtenerProductosPublicos({
-          categoria,
-          solo_disponibles: true,
+        const data = await obtenerProductosPublicos(params, {
+          signal: controller.signal,
+          cache: true,
         });
 
         if (!activo) return;
 
-        setItems((Array.isArray(data) ? data : []).map(adaptarProductoBackend));
+        const adaptados = (Array.isArray(data) ? data : []).map(
+          adaptarProductoListadoBackend,
+        );
+
+        setItems(adaptados);
+        setError("");
       } catch (err) {
-        if (!activo) return;
+        if (!activo || err?.name === "AbortError") return;
         setError(err.message || "No se pudieron cargar los productos");
       } finally {
-        if (activo) setCargando(false);
+        if (activo) {
+          setCargando(false);
+        }
       }
     }
 
@@ -41,8 +108,17 @@ export default function NewCollection({ onAddToCart, categoria = "" }) {
 
     return () => {
       activo = false;
+      controller.abort();
     };
-  }, [categoria]);
+  }, [params]);
+
+  useEffect(() => {
+    return () => {
+      if (detalleAbortRef.current) {
+        detalleAbortRef.current.abort();
+      }
+    };
+  }, []);
 
   const titulo = useMemo(() => {
     if (!categoria) return "Nueva colección";
@@ -54,17 +130,61 @@ export default function NewCollection({ onAddToCart, categoria = "" }) {
     return "Descubre piezas disponibles en esta categoría.";
   }, [categoria]);
 
-  const handleOpen = (product) => {
+  const handleOpen = useCallback(async (product) => {
     setSelected(product);
     setOpen(true);
-  };
+    setErrorDetalle("");
 
-  const handleClose = () => {
+    const detalleCache = leerDetalleProductoPublicoCache(product.id);
+    if (detalleCache) {
+      setSelected(adaptarProductoBackend(detalleCache));
+      setCargandoDetalle(false);
+      return;
+    }
+
+    setCargandoDetalle(true);
+
+    if (detalleAbortRef.current) {
+      detalleAbortRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    detalleAbortRef.current = controller;
+
+    try {
+      const data = await obtenerDetalleProductoPublico(product.id, {
+        signal: controller.signal,
+        cache: true,
+      });
+
+      if (detalleAbortRef.current !== controller) return;
+
+      setSelected(adaptarProductoBackend(data));
+    } catch (err) {
+      if (err?.name === "AbortError") return;
+      setErrorDetalle(err.message || "No se pudo cargar el detalle del producto");
+    } finally {
+      if (detalleAbortRef.current === controller) {
+        detalleAbortRef.current = null;
+        setCargandoDetalle(false);
+      }
+    }
+  }, []);
+
+  const handleClose = useCallback(() => {
+    if (detalleAbortRef.current) {
+      detalleAbortRef.current.abort();
+      detalleAbortRef.current = null;
+    }
+
     setOpen(false);
-    setTimeout(() => setSelected(null), 200);
-  };
+    setCargandoDetalle(false);
+    setErrorDetalle("");
 
-  if (cargando) {
+    window.setTimeout(() => setSelected(null), 200);
+  }, []);
+
+  if (cargando && !items.length) {
     return (
       <section className="mx-auto w-full max-w-[1600px] px-4 pb-16 pt-10 sm:px-6 lg:px-8 lg:pb-20">
         <div className="text-sm text-gray-500">Cargando productos...</div>
@@ -72,7 +192,7 @@ export default function NewCollection({ onAddToCart, categoria = "" }) {
     );
   }
 
-  if (error) {
+  if (error && !items.length) {
     return (
       <section className="mx-auto w-full max-w-[1600px] px-4 pb-16 pt-10 sm:px-6 lg:px-8 lg:pb-20">
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-600">
@@ -92,12 +212,16 @@ export default function NewCollection({ onAddToCart, categoria = "" }) {
       />
 
       {selected ? (
-        <ProductModal
-          product={selected}
-          open={open}
-          onClose={handleClose}
-          onAddToCart={onAddToCart}
-        />
+        <Suspense fallback={null}>
+          <ProductModal
+            product={selected}
+            open={open}
+            onClose={handleClose}
+            onAddToCart={onAddToCart}
+            loading={cargandoDetalle}
+            error={errorDetalle}
+          />
+        </Suspense>
       ) : null}
     </>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { obtenerCategoriasPublicas } from "../lib/apiPublic";
 import { categories as categoriasLocales } from "../data/categories";
@@ -12,8 +12,7 @@ function ArrowBtn({ dir, onClick, disabled }) {
       aria-label={dir === "left" ? "Anterior" : "Siguiente"}
       className={[
         "inline-flex h-11 w-11 items-center justify-center rounded-full",
-        "border border-black/10 bg-white/80 backdrop-blur-md",
-        "text-black shadow-sm transition-all duration-300",
+        "border border-black/10 bg-white/80 text-black shadow-sm backdrop-blur-md transition-all duration-300",
         "hover:bg-white hover:shadow-md",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-black/20",
         "disabled:cursor-not-allowed disabled:opacity-35",
@@ -67,7 +66,7 @@ function buscarCategoriaLocal(itemBackend) {
   });
 }
 
-function CategoryCard({ title, image, to }) {
+const CategoryCard = memo(function CategoryCard({ title, image, to }) {
   return (
     <Link
       to={to || "#"}
@@ -85,13 +84,14 @@ function CategoryCard({ title, image, to }) {
             src={image}
             alt={title}
             loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.05]"
           />
         ) : (
           <>
             <div className="absolute inset-0 bg-gradient-to-br from-neutral-200 via-neutral-100 to-white" />
-            <div className="absolute inset-0 opacity-70 bg-[radial-gradient(ellipse_at_top,rgba(0,0,0,0.08),transparent_60%)]" />
-            <div className="absolute inset-0 opacity-60 bg-[linear-gradient(to_right,rgba(0,0,0,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.04)_1px,transparent_1px)] bg-[size:24px_24px]" />
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(0,0,0,0.08),transparent_60%)] opacity-70" />
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(0,0,0,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.04)_1px,transparent_1px)] bg-[size:24px_24px] opacity-60" />
           </>
         )}
 
@@ -118,13 +118,15 @@ function CategoryCard({ title, image, to }) {
       </div>
     </Link>
   );
-}
+});
 
 export default function CategoryStrip({
   title = "Compra por categoría",
   subtitle = "Explora colecciones seleccionadas para ti.",
 }) {
   const trackRef = useRef(null);
+  const rafRef = useRef(0);
+
   const [canScroll, setCanScroll] = useState({ left: false, right: false });
   const [items, setItems] = useState(() => adaptarCategoriasLocales(categoriasLocales));
 
@@ -134,9 +136,25 @@ export default function CategoryStrip({
     const el = trackRef.current;
     if (!el) return;
 
-    setCanScroll({
+    const nextState = {
       left: el.scrollLeft > 2,
       right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2,
+    };
+
+    setCanScroll((prev) => {
+      if (prev.left === nextState.left && prev.right === nextState.right) {
+        return prev;
+      }
+      return nextState;
+    });
+  };
+
+  const scheduleUpdateCanScroll = () => {
+    if (rafRef.current) return;
+
+    rafRef.current = window.requestAnimationFrame(() => {
+      rafRef.current = 0;
+      updateCanScroll();
     });
   };
 
@@ -145,7 +163,7 @@ export default function CategoryStrip({
 
     async function cargar() {
       try {
-        const data = await obtenerCategoriasPublicas();
+        const data = await obtenerCategoriasPublicas({ cache: true });
         if (!activo) return;
 
         const categoriasBackend = (Array.isArray(data) ? data : []).map((item) => {
@@ -170,7 +188,7 @@ export default function CategoryStrip({
         } else {
           setItems(adaptarCategoriasLocales(categoriasLocales));
         }
-      } catch (error) {
+      } catch {
         setItems(adaptarCategoriasLocales(categoriasLocales));
       }
     }
@@ -188,12 +206,17 @@ export default function CategoryStrip({
     const el = trackRef.current;
     if (!el) return;
 
-    el.addEventListener("scroll", updateCanScroll, { passive: true });
-    window.addEventListener("resize", updateCanScroll);
+    el.addEventListener("scroll", scheduleUpdateCanScroll, { passive: true });
+    window.addEventListener("resize", scheduleUpdateCanScroll);
 
     return () => {
-      el.removeEventListener("scroll", updateCanScroll);
-      window.removeEventListener("resize", updateCanScroll);
+      el.removeEventListener("scroll", scheduleUpdateCanScroll);
+      window.removeEventListener("resize", scheduleUpdateCanScroll);
+
+      if (rafRef.current) {
+        window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = 0;
+      }
     };
   }, [safeItems.length]);
 

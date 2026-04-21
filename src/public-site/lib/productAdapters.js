@@ -1,3 +1,4 @@
+//public-site/lib/productAdapters.js
 const COLOR_MAP = {
   negro: "#111111",
   blanco: "#f5f5f5",
@@ -17,23 +18,59 @@ const COLOR_MAP = {
 };
 
 function normalizarColor(nombre = "") {
-  return COLOR_MAP[nombre.trim().toLowerCase()] || "#d4d4d8";
+  return COLOR_MAP[String(nombre).trim().toLowerCase()] || "#d4d4d8";
 }
 
 function buildVariantKey(color = "", talla = "") {
   return `${String(color).trim()}__${String(talla).trim()}`;
 }
 
+function crearBaseProducto(producto) {
+  const stockTotal = Number(producto?.stock_total || 0);
+  const stockDisponible = Number(producto?.stock_disponible || 0);
+
+  return {
+    id: producto.id,
+    productId: producto.id,
+    codigo: producto.codigo,
+    name: producto.titulo,
+    title: producto.titulo,
+    description: producto.descripcion || "",
+    price: Number(producto.precio || 0),
+    category: producto.categoria || "",
+    badge: stockTotal > 0 && stockTotal <= 5 ? "Últimas piezas" : "",
+    stockDisponible,
+    stockTotal,
+    raw: producto,
+  };
+}
+
+export function adaptarProductoListadoBackend(producto) {
+  const base = crearBaseProducto(producto);
+
+  return {
+    ...base,
+    images: producto?.imagen_principal ? [producto.imagen_principal] : [],
+    colors: [],
+    sizes: [],
+    variantStockMap: {},
+  };
+}
+
 export function adaptarProductoBackend(producto) {
-  const imagenesSecundarias = Array.isArray(producto.imagenes)
+  const base = crearBaseProducto(producto);
+
+  const imagenesSecundarias = Array.isArray(producto?.imagenes)
     ? producto.imagenes.map((item) => item.imagen).filter(Boolean)
     : [];
 
-  const images = [producto.imagen_principal, ...imagenesSecundarias].filter(
+  const images = [producto?.imagen_principal, ...imagenesSecundarias].filter(
     Boolean,
   );
 
-  const variantes = Array.isArray(producto.variantes) ? producto.variantes : [];
+  const variantes = Array.isArray(producto?.variantes)
+    ? producto.variantes
+    : [];
 
   const coloresUnicos = Array.from(
     new Set(variantes.map((v) => v.color).filter(Boolean)),
@@ -54,21 +91,14 @@ export function adaptarProductoBackend(producto) {
   }, {});
 
   return {
-    id: producto.id,
-    productId: producto.id,
-    codigo: producto.codigo,
-    name: producto.titulo,
-    title: producto.titulo,
-    description: producto.descripcion || "",
-    price: Number(producto.precio || 0),
-    category: producto.categoria || "",
-    badge: Number(producto.stock_total || 0) <= 5 ? "Últimas piezas" : "",
-    images,
+    ...base,
+    images: images.length
+      ? images
+      : producto?.imagen_principal
+        ? [producto.imagen_principal]
+        : [],
     colors,
     sizes: tallasUnicas,
-    stockDisponible: Number(producto.stock_disponible || 0),
-    stockTotal: Number(producto.stock_total || 0),
     variantStockMap,
-    raw: producto,
   };
 }

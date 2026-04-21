@@ -22,7 +22,7 @@ const LINK_CORREO = `mailto:${CORREO}?subject=${encodeURIComponent(
 const politicasCambio = [
   "No hacemos devoluciones de dinero; únicamente hacemos cambios de talla o por otro artículo de igual o de mayor precio, pagando la diferencia en caso de ser necesario.",
   "La prenda debe estar sin uso, con etiquetas y en su empaque original.",
-  "Puedes traer la prenda a cualquiera de nuestras sucursales.",
+  "Puedes traer la prenda a nuestra sucursal.",
   "Al momento de entregar o enviar tus prendas, es indispensable llevar o incluir la hoja de pedido para poder identificar tu pedido.",
 ];
 
