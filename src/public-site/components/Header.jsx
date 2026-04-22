@@ -220,6 +220,44 @@ function SearchModal({ open, onClose, items = [] }) {
   );
 }
 
+function CategoryMenuCard({ item, onClick, mobile = false }) {
+  return (
+    <Link
+      to={item.to}
+      onClick={onClick}
+      className={[
+        "group relative block overflow-hidden rounded-2xl border border-black/10 bg-[#f3f3f3] transition",
+        "hover:bg-[#eeeeee]",
+        mobile ? "min-h-[88px]" : "min-h-[96px]",
+      ].join(" ")}
+    >
+      <div className="absolute inset-0 bg-gradient-to-r from-[#f3f3f3] via-[#f3f3f3] via-60% to-transparent" />
+
+      <div
+        className={[
+          "relative z-10 flex h-full items-center",
+          mobile ? "px-4 py-4" : "px-4 py-4",
+        ].join(" ")}
+      >
+        <span className="max-w-[62%] text-sm font-extrabold uppercase tracking-tight text-black sm:text-base">
+          {item.label}
+        </span>
+      </div>
+
+      <div className="pointer-events-none absolute inset-y-0 right-0 flex w-[110px] items-end justify-end sm:w-[125px]">
+        <img
+          src={item.image}
+          alt={item.label}
+          className="h-full w-full object-contain object-right-bottom transition duration-300 group-hover:scale-[1.03]"
+          loading="lazy"
+          decoding="async"
+          draggable="false"
+        />
+      </div>
+    </Link>
+  );
+}
+
 export default function Header({ onCartClick }) {
   const nav = useNavigate();
 
@@ -511,14 +549,11 @@ export default function Header({ onCartClick }) {
 
                     <div className="grid grid-cols-2 gap-3">
                       {catalogItems.map((c) => (
-                        <Link
+                        <CategoryMenuCard
                           key={c.id}
-                          to={c.to}
+                          item={c}
                           onClick={() => setCatalogOpenDesktop(false)}
-                          className="rounded-2xl border px-4 py-3 font-medium transition hover:bg-gray-50"
-                        >
-                          {c.label}
-                        </Link>
+                        />
                       ))}
                     </div>
 
@@ -686,16 +721,14 @@ export default function Header({ onCartClick }) {
                   <ul className="mt-3 space-y-2">
                     {catalogItems.map((l) => (
                       <li key={l.id}>
-                        <Link
-                          to={l.to}
+                        <CategoryMenuCard
+                          item={l}
+                          mobile
                           onClick={() => {
                             setCatalogOpenMobile(false);
                             setMenuOpen(false);
                           }}
-                          className="block rounded-2xl border px-4 py-3 text-sm font-medium transition hover:bg-gray-50"
-                        >
-                          {l.label}
-                        </Link>
+                        />
                       </li>
                     ))}
                   </ul>

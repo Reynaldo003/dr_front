@@ -12,7 +12,7 @@ export const categories = [
   {
     id: 1,
     slug: "conjuntos",
-    name: "Conjuntos",
+    name: "Sets",
     image: conjuntosImg,
     href: "/catalogo/conjuntos",
   },

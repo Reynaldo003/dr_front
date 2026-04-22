@@ -1,4 +1,3 @@
-// dr_front/src/admin/pages/NewArrivalsAdmin.jsx
 import { useEffect, useState } from "react";
 import {
     actualizarProducto,
@@ -23,6 +22,12 @@ function formatearPrecio(valor) {
     }).format(Number(valor || 0));
 }
 
+function normalizarListadoRespuesta(data) {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.results)) return data.results;
+    return [];
+}
+
 const initialForm = {
     titulo: "",
     sku: "",
@@ -43,10 +48,18 @@ export default function NewArrivalsAdmin() {
     const cargarLanzamientos = async () => {
         try {
             setCargando(true);
-            const data = await obtenerProductos({ tipo: "new-arrivals" });
-            setLanzamientos(data || []);
+            setMensaje("");
+
+            const data = await obtenerProductos({
+                tipo: "new-arrivals",
+                page: 1,
+                page_size: 100,
+            });
+
+            setLanzamientos(normalizarListadoRespuesta(data));
         } catch (error) {
             console.error(error);
+            setLanzamientos([]);
             setMensaje(error.message || "No se pudieron cargar los lanzamientos.");
         } finally {
             setCargando(false);
@@ -154,7 +167,9 @@ export default function NewArrivalsAdmin() {
     return (
         <div className="space-y-6">
             <div className="rounded-3xl border bg-white p-6 shadow-sm">
-                <h1 className="text-2xl font-bold text-zinc-900">Administrador de New Arrivals</h1>
+                <h1 className="text-2xl font-bold text-zinc-900">
+                    Administrador de New Arrivals
+                </h1>
                 <p className="mt-2 text-sm text-zinc-500">
                     Aquí subes próximos lanzamientos. Estos productos se mostrarán en la web,
                     pero no se podrán comprar hasta que los publiques al catálogo normal.
@@ -163,7 +178,9 @@ export default function NewArrivalsAdmin() {
 
             <div className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
                 <section className="rounded-3xl border bg-white p-5 shadow-sm">
-                    <h2 className="text-lg font-semibold text-zinc-900">Nuevo lanzamiento</h2>
+                    <h2 className="text-lg font-semibold text-zinc-900">
+                        Nuevo lanzamiento
+                    </h2>
 
                     <form className="mt-5 space-y-4" onSubmit={guardarLanzamiento}>
                         <div>
@@ -194,6 +211,7 @@ export default function NewArrivalsAdmin() {
                                     placeholder="SKU-NEW-001"
                                 />
                             </div>
+
                             <div>
                                 <label className="mb-2 block text-sm font-medium text-zinc-700">
                                     Categoría
@@ -260,24 +278,24 @@ export default function NewArrivalsAdmin() {
                             </p>
                         </div>
 
-                        {imagenesBase64.length > 0 && (
+                        {imagenesBase64.length > 0 ? (
                             <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
                                 {imagenesBase64.map((imagen, index) => (
                                     <img
                                         key={index}
                                         src={imagen}
                                         alt={`Preview ${index + 1}`}
-                                        className="h-32 w-full rounded-2xl object-cover border"
+                                        className="h-32 w-full rounded-2xl border object-cover"
                                     />
                                 ))}
                             </div>
-                        )}
+                        ) : null}
 
-                        {mensaje && (
+                        {mensaje ? (
                             <div className="rounded-2xl bg-zinc-100 px-4 py-3 text-sm text-zinc-700">
                                 {mensaje}
                             </div>
-                        )}
+                        ) : null}
 
                         <button
                             type="submit"
@@ -305,10 +323,7 @@ export default function NewArrivalsAdmin() {
                     ) : (
                         <div className="mt-4 space-y-4">
                             {lanzamientos.map((producto) => (
-                                <div
-                                    key={producto.id}
-                                    className="rounded-2xl border p-4"
-                                >
+                                <div key={producto.id} className="rounded-2xl border p-4">
                                     <div className="flex flex-col gap-4 md:flex-row">
                                         <img
                                             src={
@@ -317,7 +332,7 @@ export default function NewArrivalsAdmin() {
                                                 "https://placehold.co/300x300?text=Producto"
                                             }
                                             alt={producto.titulo}
-                                            className="h-28 w-28 rounded-2xl object-cover border"
+                                            className="h-28 w-28 rounded-2xl border object-cover"
                                         />
 
                                         <div className="flex-1">
