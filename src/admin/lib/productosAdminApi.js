@@ -17,7 +17,7 @@ function clearPublicCaches() {
       }
     });
   } catch {
-    // No romper la app.
+    // No romper la app
   }
 }
 
@@ -52,6 +52,7 @@ async function request(path, options = {}) {
     method,
     headers,
     signal: options.signal,
+    cache: method === "GET" ? "no-store" : "default",
   });
 
   if (response.status === 204) {

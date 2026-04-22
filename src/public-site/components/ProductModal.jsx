@@ -1,4 +1,3 @@
-//public-site/components/ProductModal.jsx
 import {
   lazy,
   Suspense,
@@ -10,7 +9,8 @@ import {
 } from "react";
 import { useCart } from "../context/cart";
 
-const Reviews = lazy(() => import("./Reviews"));
+const loadReviews = () => import("./Reviews");
+const Reviews = lazy(loadReviews);
 
 const PRICE_FORMATTER = new Intl.NumberFormat("es-MX", {
   style: "currency",
@@ -19,6 +19,38 @@ const PRICE_FORMATTER = new Intl.NumberFormat("es-MX", {
 
 function buildVariantKey(color = "", talla = "") {
   return `${String(color).trim()}__${String(talla).trim()}`;
+}
+
+function ejecutarCuandoIdle(fn, delayFallback = 250) {
+  if (typeof window === "undefined") {
+    fn();
+    return () => { };
+  }
+
+  let cancelado = false;
+
+  if ("requestIdleCallback" in window) {
+    const id = window.requestIdleCallback(
+      () => {
+        if (!cancelado) fn();
+      },
+      { timeout: 1200 },
+    );
+
+    return () => {
+      cancelado = true;
+      window.cancelIdleCallback(id);
+    };
+  }
+
+  const timeoutId = window.setTimeout(() => {
+    if (!cancelado) fn();
+  }, delayFallback);
+
+  return () => {
+    cancelado = true;
+    window.clearTimeout(timeoutId);
+  };
 }
 
 export default function ProductModal({
@@ -34,6 +66,7 @@ export default function ProductModal({
   const [selectedSize, setSelectedSize] = useState(null);
   const [qty, setQty] = useState(1);
   const [zoom, setZoom] = useState(false);
+  const [mostrarReviews, setMostrarReviews] = useState(false);
 
   const startX = useRef(null);
   const { addItem } = useCart();
@@ -83,6 +116,7 @@ export default function ProductModal({
     setImgIndex(0);
     setZoom(false);
     setQty(1);
+    setMostrarReviews(false);
 
     const primerColorDisponible =
       colors.find((c) => Number(colorStockMap[c.name] || 0) > 0)?.name || null;
@@ -140,6 +174,17 @@ export default function ProductModal({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, onClose, next, prev]);
 
+  useEffect(() => {
+    if (!open || loading || error) return;
+
+    const cancelar = ejecutarCuandoIdle(() => {
+      loadReviews().catch(() => { });
+      setMostrarReviews(true);
+    }, 350);
+
+    return cancelar;
+  }, [open, loading, error, product?.id]);
+
   const handleTouchStart = useCallback((e) => {
     startX.current = e.touches?.[0]?.clientX ?? null;
   }, []);
@@ -173,6 +218,7 @@ export default function ProductModal({
   return (
     <div className="fixed inset-0 z-[999]">
       <button
+        type="button"
         className="absolute inset-0 bg-black/50"
         onClick={onClose}
         aria-label="Cerrar"
@@ -188,6 +234,7 @@ export default function ProductModal({
             <h3 className="text-base font-semibold sm:text-lg">{product.name}</h3>
 
             <button
+              type="button"
               onClick={onClose}
               className="rounded-full p-2 transition hover:bg-gray-100"
               aria-label="Cerrar"
@@ -229,12 +276,14 @@ export default function ProductModal({
                 {images.length > 1 ? (
                   <>
                     <button
+                      type="button"
                       onClick={prev}
                       className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow hover:bg-white"
                     >
                       ‹
                     </button>
                     <button
+                      type="button"
                       onClick={next}
                       className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow hover:bg-white"
                     >
@@ -249,6 +298,7 @@ export default function ProductModal({
                   {images.map((src, idx) => (
                     <button
                       key={src + idx}
+                      type="button"
                       onClick={() => {
                         setZoom(false);
                         setImgIndex(idx);
@@ -375,6 +425,7 @@ export default function ProductModal({
                   <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
                     <div className="flex w-fit items-center overflow-hidden rounded-full border border-gray-200">
                       <button
+                        type="button"
                         className="h-11 w-12 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                         onClick={() => setQty((q) => Math.max(1, q - 1))}
                         disabled={!puedeAgregar}
@@ -387,6 +438,7 @@ export default function ProductModal({
                       </div>
 
                       <button
+                        type="button"
                         className="h-11 w-12 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
                         onClick={() =>
                           setQty((q) => Math.min(selectedVariantStock, q + 1))
@@ -398,6 +450,7 @@ export default function ProductModal({
                     </div>
 
                     <button
+                      type="button"
                       className="h-12 flex-1 rounded-full bg-black font-bold text-white shadow-lg transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={!puedeAgregar}
                       onClick={() => {
@@ -423,15 +476,17 @@ export default function ProductModal({
                     </button>
                   </div>
 
-                  <div className="mt-8 border-t pt-6">
-                    <Suspense fallback={null}>
-                      <Reviews
-                        productId={product.id}
-                        productName={product.name}
-                        compact
-                      />
-                    </Suspense>
-                  </div>
+                  {mostrarReviews ? (
+                    <div className="mt-8 border-t pt-6">
+                      <Suspense fallback={null}>
+                        <Reviews
+                          productId={product.id}
+                          productName={product.name}
+                          compact
+                        />
+                      </Suspense>
+                    </div>
+                  ) : null}
                 </>
               ) : null}
             </div>

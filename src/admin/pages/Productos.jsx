@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ChevronLeft,
+  ChevronRight,
   Eye,
   Pencil,
   Plus,
   Search,
   Trash2,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 
 import Card from "../components/ui/Card";
@@ -62,17 +62,46 @@ function statusBadge(status) {
   );
 }
 
+function ejecutarTrasPintar(fn) {
+  if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(() => fn());
+    return;
+  }
+
+  setTimeout(fn, 0);
+}
+
+function crearLlaveListado({ buscar = "", page = 1, pageSize = PAGE_SIZE }) {
+  return `${buscar}::${page}::${pageSize}`;
+}
+
 function toUiProduct(producto) {
   const variantes = Array.isArray(producto?.variantes) ? producto.variantes : [];
   const imagenes = Array.isArray(producto?.imagenes) ? producto.imagenes : [];
 
-  const colors = [...new Set(variantes.map((item) => item.color).filter(Boolean))];
-  const sizes = [...new Set(variantes.map((item) => item.talla).filter(Boolean))];
+  const colors =
+    variantes.length > 0
+      ? [...new Set(variantes.map((item) => item.color).filter(Boolean))]
+      : [];
 
-  const stockMap = variantes.reduce((acc, item) => {
-    acc[`${item.color}__${item.talla}`] = Number(item.stock || 0);
-    return acc;
-  }, {});
+  const sizes =
+    variantes.length > 0
+      ? [...new Set(variantes.map((item) => item.talla).filter(Boolean))]
+      : [];
+
+  const stockMap =
+    variantes.length > 0
+      ? variantes.reduce((acc, item) => {
+        acc[`${item.color}__${item.talla}`] = Number(item.stock || 0);
+        return acc;
+      }, {})
+      : {};
+
+  const totalColors =
+    Number(producto?.total_colores ?? 0) || colors.length;
+
+  const totalSizes =
+    Number(producto?.total_tallas ?? 0) || sizes.length;
 
   return {
     apiId: producto.id,
@@ -100,8 +129,8 @@ function toUiProduct(producto) {
       sizes,
       stockMap,
       totalStock: Number(producto.stock_total || 0),
-      totalColors: colors.length,
-      totalSizes: sizes.length,
+      totalColors,
+      totalSizes,
     },
   };
 }
@@ -173,6 +202,8 @@ export default function Productos() {
   const [selected, setSelected] = useState(null);
 
   const detalleCacheRef = useRef(new Map());
+  const detallePendienteRef = useRef(new Map());
+  const listadoCacheRef = useRef(new Map());
   const detalleAbortRef = useRef(null);
 
   useEffect(() => {
@@ -187,22 +218,101 @@ export default function Productos() {
     setPage(1);
   }, [debouncedQ]);
 
+  const invalidarListadoCache = useCallback(() => {
+    listadoCacheRef.current.clear();
+  }, []);
+
   const aplicarRespuestaListado = useCallback((data, paginaActual) => {
     const results = Array.isArray(data?.results) ? data.results : [];
 
-    setProducts(results.map(toUiProduct));
-    setPageInfo({
-      count: Number(data?.count || 0),
-      page: Number(data?.page || paginaActual),
-      pageSize: Number(data?.page_size || PAGE_SIZE),
-      pages: Number(data?.pages || 1),
-      hasPrevious: Boolean(data?.has_previous),
-      hasNext: Boolean(data?.has_next),
+    startTransition(() => {
+      setProducts(results.map(toUiProduct));
+      setPageInfo({
+        count: Number(data?.count || 0),
+        page: Number(data?.page || paginaActual),
+        pageSize: Number(data?.page_size || PAGE_SIZE),
+        pages: Number(data?.pages || 1),
+        hasPrevious: Boolean(data?.has_previous),
+        hasNext: Boolean(data?.has_next),
+      });
     });
   }, []);
 
+  const precargarPagina = useCallback(async (buscar, paginaSiguiente) => {
+    if (!paginaSiguiente || paginaSiguiente < 1) return;
+
+    const llave = crearLlaveListado({
+      buscar,
+      page: paginaSiguiente,
+      pageSize: PAGE_SIZE,
+    });
+
+    if (listadoCacheRef.current.has(llave)) return;
+
+    try {
+      const data = await obtenerProductos({
+        buscar,
+        page: paginaSiguiente,
+        page_size: PAGE_SIZE,
+      });
+
+      listadoCacheRef.current.set(llave, data);
+    } catch {
+      // Prefetch silencioso
+    }
+  }, []);
+
+  const resolverDetalleProducto = useCallback(async (productoBase, options = {}) => {
+    if (!productoBase?.apiId) return null;
+
+    const apiId = productoBase.apiId;
+    const cacheado = detalleCacheRef.current.get(apiId);
+    if (cacheado) return cacheado;
+
+    const pendiente = detallePendienteRef.current.get(apiId);
+    if (pendiente) return pendiente;
+
+    const promesa = obtenerProducto(apiId, { signal: options.signal })
+      .then((data) => {
+        const productoCompleto = toUiProduct(data);
+        detalleCacheRef.current.set(apiId, productoCompleto);
+        return productoCompleto;
+      })
+      .finally(() => {
+        detallePendienteRef.current.delete(apiId);
+      });
+
+    detallePendienteRef.current.set(apiId, promesa);
+    return promesa;
+  }, []);
+
+  const precargarDetalleProducto = useCallback(
+    (productoBase) => {
+      if (!productoBase?.apiId) return;
+      if (detalleCacheRef.current.has(productoBase.apiId)) return;
+      if (detallePendienteRef.current.has(productoBase.apiId)) return;
+
+      resolverDetalleProducto(productoBase).catch(() => {
+        // Precarga silenciosa
+      });
+    },
+    [resolverDetalleProducto],
+  );
+
   const recargarPaginaActual = useCallback(
-    async (paginaActual = page) => {
+    async (paginaActual = page, { forzar = false } = {}) => {
+      const llave = crearLlaveListado({
+        buscar: debouncedQ,
+        page: paginaActual,
+        pageSize: PAGE_SIZE,
+      });
+
+      if (!forzar && listadoCacheRef.current.has(llave)) {
+        aplicarRespuestaListado(listadoCacheRef.current.get(llave), paginaActual);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError("");
 
@@ -213,7 +323,12 @@ export default function Productos() {
           page_size: PAGE_SIZE,
         });
 
+        listadoCacheRef.current.set(llave, data);
         aplicarRespuestaListado(data, paginaActual);
+
+        if (data?.has_next) {
+          precargarPagina(debouncedQ, paginaActual + 1);
+        }
       } catch (err) {
         console.error(err);
         setError(err?.message || "No se pudieron cargar los productos.");
@@ -221,7 +336,7 @@ export default function Productos() {
         setLoading(false);
       }
     },
-    [aplicarRespuestaListado, debouncedQ, page],
+    [aplicarRespuestaListado, debouncedQ, page, precargarPagina],
   );
 
   useEffect(() => {
@@ -229,6 +344,24 @@ export default function Productos() {
     let activo = true;
 
     async function cargar() {
+      const llave = crearLlaveListado({
+        buscar: debouncedQ,
+        page,
+        pageSize: PAGE_SIZE,
+      });
+
+      const cacheado = listadoCacheRef.current.get(llave);
+
+      if (cacheado) {
+        aplicarRespuestaListado(cacheado, page);
+        setLoading(false);
+
+        if (cacheado?.has_next) {
+          precargarPagina(debouncedQ, page + 1);
+        }
+        return;
+      }
+
       setLoading(true);
       setError("");
 
@@ -244,7 +377,12 @@ export default function Productos() {
 
         if (!activo) return;
 
+        listadoCacheRef.current.set(llave, data);
         aplicarRespuestaListado(data, page);
+
+        if (data?.has_next) {
+          precargarPagina(debouncedQ, page + 1);
+        }
       } catch (err) {
         if (!activo || err?.name === "AbortError") return;
         console.error(err);
@@ -262,7 +400,7 @@ export default function Productos() {
       activo = false;
       controller.abort();
     };
-  }, [aplicarRespuestaListado, debouncedQ, page]);
+  }, [aplicarRespuestaListado, debouncedQ, page, precargarPagina]);
 
   useEffect(() => {
     return () => {
@@ -272,62 +410,78 @@ export default function Productos() {
     };
   }, []);
 
-  async function cargarDetalleProducto(productoBase) {
-    if (!productoBase?.apiId) return;
+  const cargarDetalleProducto = useCallback(
+    async (productoBase) => {
+      if (!productoBase?.apiId) return;
 
-    const apiId = productoBase.apiId;
-    const cacheado = detalleCacheRef.current.get(apiId);
+      const apiId = productoBase.apiId;
+      const cacheado = detalleCacheRef.current.get(apiId);
 
-    if (cacheado) {
-      setSelected(cacheado);
-      return;
-    }
-
-    if (detalleAbortRef.current) {
-      detalleAbortRef.current.abort();
-    }
-
-    const controller = new AbortController();
-    detalleAbortRef.current = controller;
-    setCargandoDetalle(true);
-
-    try {
-      const data = await obtenerProducto(apiId, { signal: controller.signal });
-
-      if (detalleAbortRef.current !== controller) return;
-
-      const productoCompleto = toUiProduct(data);
-      detalleCacheRef.current.set(apiId, productoCompleto);
-
-      setSelected((prev) => {
-        if (!prev || prev.apiId !== apiId) return prev;
-        return productoCompleto;
-      });
-    } catch (err) {
-      if (err?.name === "AbortError") return;
-      console.error(err);
-      alert(err.message || "No se pudo cargar el detalle del producto.");
-    } finally {
-      if (detalleAbortRef.current === controller) {
-        detalleAbortRef.current = null;
-        setCargandoDetalle(false);
+      if (cacheado) {
+        setSelected(cacheado);
+        return;
       }
-    }
-  }
 
-  function handleOpenView(producto) {
-    setSelected(producto);
-    setOpenEdit(false);
-    setOpenView(true);
-    cargarDetalleProducto(producto);
-  }
+      if (detalleAbortRef.current) {
+        detalleAbortRef.current.abort();
+      }
 
-  function handleOpenEdit(producto) {
-    setSelected(producto);
-    setOpenView(false);
-    setOpenEdit(true);
-    cargarDetalleProducto(producto);
-  }
+      const controller = new AbortController();
+      detalleAbortRef.current = controller;
+      setCargandoDetalle(true);
+
+      try {
+        const productoCompleto = await resolverDetalleProducto(productoBase, {
+          signal: controller.signal,
+        });
+
+        if (detalleAbortRef.current !== controller || !productoCompleto) return;
+
+        startTransition(() => {
+          setSelected((prev) => {
+            if (!prev || prev.apiId !== apiId) return prev;
+            return productoCompleto;
+          });
+        });
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        console.error(err);
+        alert(err?.message || "No se pudo cargar el detalle del producto.");
+      } finally {
+        if (detalleAbortRef.current === controller) {
+          detalleAbortRef.current = null;
+          setCargandoDetalle(false);
+        }
+      }
+    },
+    [resolverDetalleProducto],
+  );
+
+  const handleOpenView = useCallback(
+    (producto) => {
+      setSelected(producto);
+      setOpenEdit(false);
+      setOpenView(true);
+
+      ejecutarTrasPintar(() => {
+        cargarDetalleProducto(producto);
+      });
+    },
+    [cargarDetalleProducto],
+  );
+
+  const handleOpenEdit = useCallback(
+    (producto) => {
+      setSelected(producto);
+      setOpenView(false);
+      setOpenEdit(true);
+
+      ejecutarTrasPintar(() => {
+        cargarDetalleProducto(producto);
+      });
+    },
+    [cargarDetalleProducto],
+  );
 
   function handleCloseView() {
     setOpenView(false);
@@ -370,14 +524,16 @@ export default function Productos() {
 
       const creado = await crearProducto(toApiPayload(ui));
       const productoCreado = toUiProduct(creado);
+
       detalleCacheRef.current.set(productoCreado.apiId, productoCreado);
+      invalidarListadoCache();
 
       setOpenNew(false);
 
       if (page !== 1) {
         setPage(1);
       } else {
-        await recargarPaginaActual(1);
+        await recargarPaginaActual(1, { forzar: true });
       }
     } finally {
       setGuardando(false);
@@ -394,7 +550,9 @@ export default function Productos() {
       );
 
       const productoUi = toUiProduct(actualizado);
+
       detalleCacheRef.current.set(productoUi.apiId, productoUi);
+      invalidarListadoCache();
 
       setProducts((prev) =>
         prev.map((item) => (item.apiId === productoUi.apiId ? productoUi : item)),
@@ -415,7 +573,10 @@ export default function Productos() {
 
     try {
       await eliminarProducto(producto.apiId);
+
       detalleCacheRef.current.delete(producto.apiId);
+      detallePendienteRef.current.delete(producto.apiId);
+      invalidarListadoCache();
 
       const soloHabiaUno = products.length === 1;
       const habiaPaginaAnterior = page > 1;
@@ -423,7 +584,7 @@ export default function Productos() {
       if (soloHabiaUno && habiaPaginaAnterior) {
         setPage((prev) => prev - 1);
       } else {
-        await recargarPaginaActual(page);
+        await recargarPaginaActual(page, { forzar: true });
       }
 
       if (selected?.apiId === producto.apiId) {
@@ -433,7 +594,7 @@ export default function Productos() {
       }
     } catch (err) {
       console.error(err);
-      alert(err.message || "No se pudo eliminar el producto.");
+      alert(err?.message || "No se pudo eliminar el producto.");
     }
   }
 
@@ -497,6 +658,7 @@ export default function Productos() {
                         alt={producto.title}
                         className="h-full w-full object-cover"
                         loading="lazy"
+                        decoding="async"
                       />
                     ) : (
                       <div className="grid h-full w-full place-items-center text-xs text-zinc-500">
@@ -541,6 +703,8 @@ export default function Productos() {
                     <div className="mt-3 grid grid-cols-3 gap-2">
                       <button
                         type="button"
+                        onMouseEnter={() => precargarDetalleProducto(producto)}
+                        onFocus={() => precargarDetalleProducto(producto)}
                         onClick={() => handleOpenView(producto)}
                         className="rounded-xl border px-4 py-2 text-sm transition hover:bg-zinc-50 active:scale-[0.98]"
                       >
@@ -549,6 +713,8 @@ export default function Productos() {
 
                       <button
                         type="button"
+                        onMouseEnter={() => precargarDetalleProducto(producto)}
+                        onFocus={() => precargarDetalleProducto(producto)}
                         onClick={() => handleOpenEdit(producto)}
                         className="rounded-xl bg-zinc-900 px-4 py-2 text-sm text-white transition hover:opacity-95 active:scale-[0.98]"
                       >
@@ -603,6 +769,7 @@ export default function Productos() {
                               alt={producto.title}
                               className="h-full w-full object-cover"
                               loading="lazy"
+                              decoding="async"
                             />
                           ) : (
                             <div className="grid h-full w-full place-items-center text-[10px] text-zinc-500">
@@ -649,6 +816,8 @@ export default function Productos() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
+                          onMouseEnter={() => precargarDetalleProducto(producto)}
+                          onFocus={() => precargarDetalleProducto(producto)}
                           onClick={() => handleOpenView(producto)}
                           className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs transition hover:bg-zinc-50 active:scale-[0.98]"
                         >
@@ -658,6 +827,8 @@ export default function Productos() {
 
                         <button
                           type="button"
+                          onMouseEnter={() => precargarDetalleProducto(producto)}
+                          onFocus={() => precargarDetalleProducto(producto)}
                           onClick={() => handleOpenEdit(producto)}
                           className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-3 py-2 text-xs text-white transition hover:opacity-95 active:scale-[0.98]"
                         >

@@ -1,5 +1,4 @@
-//public-site/components/ProductGrid.jsx
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const PRICE_FORMATTER = new Intl.NumberFormat("es-MX", {
   style: "currency",
@@ -31,17 +30,29 @@ function formatPrice(value) {
   return PRICE_FORMATTER.format(Number(value) || 0);
 }
 
-const ProductCard = memo(function ProductCard({ product, onOpen, priority = false }) {
+const ProductCard = memo(function ProductCard({
+  product,
+  onOpen,
+  onPrefetch,
+  priority = false,
+}) {
   const image = product?.images?.[0] || product?.image || "";
 
   const handleClick = useCallback(() => {
     onOpen?.(product);
   }, [onOpen, product]);
 
+  const handlePrefetch = useCallback(() => {
+    onPrefetch?.(product);
+  }, [onPrefetch, product]);
+
   return (
     <button
       type="button"
       onClick={handleClick}
+      onMouseEnter={handlePrefetch}
+      onFocus={handlePrefetch}
+      onTouchStart={handlePrefetch}
       className={[
         "group relative block w-full overflow-hidden rounded-[28px] text-left",
         "bg-neutral-200 shadow-[0_8px_24px_rgba(0,0,0,0.08)]",
@@ -105,6 +116,7 @@ const ProductCard = memo(function ProductCard({ product, onOpen, priority = fals
 export default memo(function ProductGrid({
   items = [],
   onOpen,
+  onPrefetch,
   title = "Nueva colección",
   subtitle = "Explora piezas seleccionadas para ti.",
 }) {
@@ -112,7 +124,7 @@ export default memo(function ProductGrid({
   const rafRef = useRef(0);
   const [canScroll, setCanScroll] = useState({ left: false, right: false });
 
-  const safeItems = Array.isArray(items) ? items : [];
+  const safeItems = useMemo(() => (Array.isArray(items) ? items : []), [items]);
 
   const updateCanScroll = useCallback(() => {
     const el = trackRef.current;
@@ -132,6 +144,7 @@ export default memo(function ProductGrid({
   }, []);
 
   const scheduleUpdateCanScroll = useCallback(() => {
+    if (typeof window === "undefined") return;
     if (rafRef.current) return;
 
     rafRef.current = window.requestAnimationFrame(() => {
@@ -153,7 +166,7 @@ export default memo(function ProductGrid({
       el.removeEventListener("scroll", scheduleUpdateCanScroll);
       window.removeEventListener("resize", scheduleUpdateCanScroll);
 
-      if (rafRef.current) {
+      if (rafRef.current && typeof window !== "undefined") {
         window.cancelAnimationFrame(rafRef.current);
         rafRef.current = 0;
       }
@@ -224,6 +237,7 @@ export default memo(function ProductGrid({
                   <ProductCard
                     product={product}
                     onOpen={onOpen}
+                    onPrefetch={onPrefetch}
                     priority={index < 2}
                   />
                 </div>

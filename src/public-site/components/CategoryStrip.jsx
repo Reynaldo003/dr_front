@@ -1,5 +1,4 @@
-//public-site/components/CategoryStrip.jsx
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { obtenerCategoriasPublicas } from "../lib/apiPublic";
 import { categories as categoriasLocales } from "../data/categories";
@@ -67,6 +66,38 @@ function buscarCategoriaLocal(itemBackend) {
   });
 }
 
+function ejecutarCuandoIdle(fn, delayFallback = 250) {
+  if (typeof window === "undefined") {
+    fn();
+    return () => { };
+  }
+
+  let cancelado = false;
+
+  if ("requestIdleCallback" in window) {
+    const id = window.requestIdleCallback(
+      () => {
+        if (!cancelado) fn();
+      },
+      { timeout: 1200 },
+    );
+
+    return () => {
+      cancelado = true;
+      window.cancelIdleCallback(id);
+    };
+  }
+
+  const timeoutId = window.setTimeout(() => {
+    if (!cancelado) fn();
+  }, delayFallback);
+
+  return () => {
+    cancelado = true;
+    window.clearTimeout(timeoutId);
+  };
+}
+
 const CategoryCard = memo(function CategoryCard({ title, image, to }) {
   return (
     <Link
@@ -86,6 +117,7 @@ const CategoryCard = memo(function CategoryCard({ title, image, to }) {
             alt={title}
             loading="lazy"
             decoding="async"
+            sizes="(min-width: 1280px) 28vw, (min-width: 1024px) 31vw, (min-width: 640px) 48vw, 82vw"
             className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.05]"
           />
         ) : (
@@ -133,7 +165,7 @@ export default function CategoryStrip({
 
   const safeItems = useMemo(() => (Array.isArray(items) ? items : []), [items]);
 
-  const updateCanScroll = () => {
+  const updateCanScroll = useCallback(() => {
     const el = trackRef.current;
     if (!el) return;
 
@@ -148,21 +180,22 @@ export default function CategoryStrip({
       }
       return nextState;
     });
-  };
+  }, []);
 
-  const scheduleUpdateCanScroll = () => {
+  const scheduleUpdateCanScroll = useCallback(() => {
+    if (typeof window === "undefined") return;
     if (rafRef.current) return;
 
     rafRef.current = window.requestAnimationFrame(() => {
       rafRef.current = 0;
       updateCanScroll();
     });
-  };
+  }, [updateCanScroll]);
 
   useEffect(() => {
     let activo = true;
 
-    async function cargar() {
+    const cancelar = ejecutarCuandoIdle(async () => {
       try {
         const data = await obtenerCategoriasPublicas({ cache: true });
         if (!activo) return;
@@ -186,18 +219,15 @@ export default function CategoryStrip({
 
         if (categoriasBackend.length > 0) {
           setItems(categoriasBackend);
-        } else {
-          setItems(adaptarCategoriasLocales(categoriasLocales));
         }
       } catch {
-        setItems(adaptarCategoriasLocales(categoriasLocales));
+        // Dejamos las locales sin romper nada.
       }
-    }
-
-    cargar();
+    });
 
     return () => {
       activo = false;
+      cancelar();
     };
   }, []);
 
@@ -214,14 +244,14 @@ export default function CategoryStrip({
       el.removeEventListener("scroll", scheduleUpdateCanScroll);
       window.removeEventListener("resize", scheduleUpdateCanScroll);
 
-      if (rafRef.current) {
+      if (rafRef.current && typeof window !== "undefined") {
         window.cancelAnimationFrame(rafRef.current);
         rafRef.current = 0;
       }
     };
-  }, [safeItems.length]);
+  }, [safeItems.length, scheduleUpdateCanScroll, updateCanScroll]);
 
-  const scrollByCards = (dir) => {
+  const scrollByCards = useCallback((dir) => {
     const el = trackRef.current;
     if (!el) return;
 
@@ -230,7 +260,7 @@ export default function CategoryStrip({
       left: dir === "left" ? -step : step,
       behavior: "smooth",
     });
-  };
+  }, []);
 
   return (
     <section

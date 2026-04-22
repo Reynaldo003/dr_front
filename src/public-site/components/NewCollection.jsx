@@ -1,4 +1,3 @@
-//public-site/components/NewCollection.jsx
 import {
   lazy,
   Suspense,
@@ -13,6 +12,7 @@ import {
   leerProductosPublicosCache,
   obtenerDetalleProductoPublico,
   obtenerProductosPublicos,
+  precargarDetalleProductoPublico,
 } from "../lib/apiPublic";
 import {
   adaptarProductoBackend,
@@ -20,9 +20,51 @@ import {
 } from "../lib/productAdapters";
 import ProductGrid from "./ProductGrid";
 
-const ProductModal = lazy(() => import("./ProductModal"));
+const loadProductModal = () => import("./ProductModal");
+const ProductModal = lazy(loadProductModal);
 
 const PAGE_SIZE = 24;
+
+function ejecutarCuandoIdle(fn, delayFallback = 250) {
+  if (typeof window === "undefined") {
+    fn();
+    return () => { };
+  }
+
+  let cancelado = false;
+
+  if ("requestIdleCallback" in window) {
+    const id = window.requestIdleCallback(
+      () => {
+        if (!cancelado) fn();
+      },
+      { timeout: 1200 },
+    );
+
+    return () => {
+      cancelado = true;
+      window.cancelIdleCallback(id);
+    };
+  }
+
+  const timeoutId = window.setTimeout(() => {
+    if (!cancelado) fn();
+  }, delayFallback);
+
+  return () => {
+    cancelado = true;
+    window.clearTimeout(timeoutId);
+  };
+}
+
+function ejecutarDespuesDePintar(fn) {
+  if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(() => fn());
+    return;
+  }
+
+  setTimeout(fn, 0);
+}
 
 export default function NewCollection({
   onAddToCart,
@@ -121,6 +163,21 @@ export default function NewCollection({
     };
   }, []);
 
+  useEffect(() => {
+    if (!items.length) return;
+
+    const cancelar = ejecutarCuandoIdle(() => {
+      loadProductModal().catch(() => { });
+      items.slice(0, 2).forEach((item) => {
+        if (item?.id) {
+          precargarDetalleProductoPublico(item.id, { cache: true });
+        }
+      });
+    }, 350);
+
+    return cancelar;
+  }, [items]);
+
   const titulo = useMemo(() => {
     if (!categoria) return "Nueva colección";
     return categoria;
@@ -131,10 +188,18 @@ export default function NewCollection({
     return "Descubre piezas disponibles en esta categoría.";
   }, [categoria]);
 
-  const handleOpen = useCallback(async (product) => {
+  const handlePrefetch = useCallback((product) => {
+    if (!product?.id) return;
+
+    loadProductModal().catch(() => { });
+    precargarDetalleProductoPublico(product.id, { cache: true });
+  }, []);
+
+  const handleOpen = useCallback((product) => {
     setSelected(product);
     setOpen(true);
     setErrorDetalle("");
+    loadProductModal().catch(() => { });
 
     const detalleCache = leerDetalleProductoPublicoCache(product.id);
     if (detalleCache) {
@@ -152,24 +217,26 @@ export default function NewCollection({
     const controller = new AbortController();
     detalleAbortRef.current = controller;
 
-    try {
-      const data = await obtenerDetalleProductoPublico(product.id, {
-        signal: controller.signal,
-        cache: true,
-      });
+    ejecutarDespuesDePintar(async () => {
+      try {
+        const data = await obtenerDetalleProductoPublico(product.id, {
+          signal: controller.signal,
+          cache: true,
+        });
 
-      if (detalleAbortRef.current !== controller) return;
+        if (detalleAbortRef.current !== controller) return;
 
-      setSelected(adaptarProductoBackend(data));
-    } catch (err) {
-      if (err?.name === "AbortError") return;
-      setErrorDetalle(err.message || "No se pudo cargar el detalle del producto");
-    } finally {
-      if (detalleAbortRef.current === controller) {
-        detalleAbortRef.current = null;
-        setCargandoDetalle(false);
+        setSelected(adaptarProductoBackend(data));
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+        setErrorDetalle(err.message || "No se pudo cargar el detalle del producto");
+      } finally {
+        if (detalleAbortRef.current === controller) {
+          detalleAbortRef.current = null;
+          setCargandoDetalle(false);
+        }
       }
-    }
+    });
   }, []);
 
   const handleClose = useCallback(() => {
@@ -182,7 +249,7 @@ export default function NewCollection({
     setCargandoDetalle(false);
     setErrorDetalle("");
 
-    window.setTimeout(() => setSelected(null), 200);
+    window.setTimeout(() => setSelected(null), 180);
   }, []);
 
   if (cargando && !items.length) {
@@ -208,6 +275,7 @@ export default function NewCollection({
       <ProductGrid
         items={items}
         onOpen={handleOpen}
+        onPrefetch={handlePrefetch}
         title={titulo}
         subtitle={subtitulo}
       />

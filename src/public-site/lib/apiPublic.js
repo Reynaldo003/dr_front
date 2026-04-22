@@ -1,4 +1,3 @@
-//public-site/lib/apiPublic.js
 const API_BASE = "https://misdosreynas.com/api";
 
 const CLIENTE_STORAGE_KEY = "cliente_session";
@@ -8,7 +7,13 @@ const CACHE_PREFIX = "public_api_cache_v2::";
 const memoryCache = new Map();
 const pendingRequests = new Map();
 
+function esNavegador() {
+  return typeof window !== "undefined" && typeof localStorage !== "undefined";
+}
+
 function getClienteToken() {
+  if (!esNavegador()) return "";
+
   try {
     const raw = localStorage.getItem(CLIENTE_STORAGE_KEY);
     if (!raw) return "";
@@ -31,6 +36,8 @@ function getCachedValue(key) {
     }
     memoryCache.delete(key);
   }
+
+  if (!esNavegador()) return null;
 
   try {
     const raw = localStorage.getItem(key);
@@ -57,15 +64,19 @@ function setCachedValue(key, data) {
 
   memoryCache.set(key, item);
 
+  if (!esNavegador()) return;
+
   try {
     localStorage.setItem(key, JSON.stringify(item));
   } catch {
-    // Si localStorage está lleno o bloqueado, al menos queda el cache en memoria.
+    // Si localStorage falla, se conserva al menos el cache en memoria.
   }
 }
 
 function clearGetCache() {
   memoryCache.clear();
+
+  if (!esNavegador()) return;
 
   try {
     for (let i = localStorage.length - 1; i >= 0; i -= 1) {
@@ -98,7 +109,8 @@ function buildProductosPublicosPath(params = {}) {
   query.set("page", String(params.page || 1));
   query.set("page_size", String(params.page_size || 24));
 
-  return `/public/productos/${query.toString() ? `?${query.toString()}` : ""}`;
+  const qs = query.toString();
+  return `/public/productos/${qs ? `?${qs}` : ""}`;
 }
 
 function buildDetalleProductoPath(productId) {
@@ -150,6 +162,7 @@ async function request(path, options = {}) {
       headers,
       body: options.body,
       signal: options.signal,
+      cache: method === "GET" ? "default" : "no-store",
     });
 
     const data = await parseResponse(response);
@@ -226,4 +239,41 @@ export async function crearCheckoutMercadoPago(payload) {
     body: JSON.stringify(payload),
     cache: false,
   });
+}
+
+export async function precargarProductosPublicos(params = {}, options = {}) {
+  try {
+    return await obtenerProductosPublicos(params, {
+      ...options,
+      cache: options.cache !== false,
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function precargarDetalleProductoPublico(productId, options = {}) {
+  try {
+    return await obtenerDetalleProductoPublico(productId, {
+      ...options,
+      cache: options.cache !== false,
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function precargarCategoriasPublicas(options = {}) {
+  try {
+    return await obtenerCategoriasPublicas({
+      ...options,
+      cache: options.cache !== false,
+    });
+  } catch {
+    return [];
+  }
+}
+
+export function limpiarCachePublica() {
+  clearGetCache();
 }
