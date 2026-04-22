@@ -1,9 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Card from "../components/ui/Card";
-import Badge from "../components/ui/Badge";
-import NewProductModal from "../components/products/NewProductModal";
-import ProductViewModal from "../components/products/ProductViewModal";
-import ProductEditModal from "../components/products/ProductEditModal";
 import {
   Eye,
   Pencil,
@@ -13,6 +8,12 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+
+import Card from "../components/ui/Card";
+import Badge from "../components/ui/Badge";
+import NewProductModal from "../components/products/NewProductModal";
+import ProductViewModal from "../components/products/ProductViewModal";
+import ProductEditModal from "../components/products/ProductEditModal";
 import {
   obtenerProducto,
   obtenerProductos,
@@ -30,7 +31,7 @@ function useEsMobile() {
   });
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined") return undefined;
 
     function onResize() {
       setEsMobile(window.innerWidth < 768);
@@ -38,6 +39,7 @@ function useEsMobile() {
 
     onResize();
     window.addEventListener("resize", onResize);
+
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
@@ -46,6 +48,7 @@ function useEsMobile() {
 
 function stockBadge(stock) {
   const s = Number(stock || 0);
+
   if (s <= 0) return <Badge variant="danger">Sin stock</Badge>;
   if (s <= 5) return <Badge variant="warning">Bajo</Badge>;
   return <Badge variant="neutral">OK</Badge>;
@@ -59,12 +62,12 @@ function statusBadge(status) {
   );
 }
 
-function toUiProduct(p) {
-  const variantes = Array.isArray(p?.variantes) ? p.variantes : [];
-  const imagenes = Array.isArray(p?.imagenes) ? p.imagenes : [];
+function toUiProduct(producto) {
+  const variantes = Array.isArray(producto?.variantes) ? producto.variantes : [];
+  const imagenes = Array.isArray(producto?.imagenes) ? producto.imagenes : [];
 
-  const colors = [...new Set(variantes.map((v) => v.color).filter(Boolean))];
-  const sizes = [...new Set(variantes.map((v) => v.talla).filter(Boolean))];
+  const colors = [...new Set(variantes.map((item) => item.color).filter(Boolean))];
+  const sizes = [...new Set(variantes.map((item) => item.talla).filter(Boolean))];
 
   const stockMap = variantes.reduce((acc, item) => {
     acc[`${item.color}__${item.talla}`] = Number(item.stock || 0);
@@ -72,21 +75,21 @@ function toUiProduct(p) {
   }, {});
 
   return {
-    apiId: p.id,
-    id: p.codigo || String(p.id),
-    title: p.titulo || "",
-    sku: p.sku || "—",
-    cost: Number(p.costo || 0),
-    price: Number(p.precio || 0),
+    apiId: producto.id,
+    id: producto.codigo || String(producto.id),
+    title: producto.titulo || "",
+    sku: producto.sku || "",
+    cost: Number(producto.costo || 0),
+    price: Number(producto.precio || 0),
     salePrice:
-      p.precio_rebaja !== null && p.precio_rebaja !== undefined
-        ? Number(p.precio_rebaja)
+      producto.precio_rebaja !== null && producto.precio_rebaja !== undefined
+        ? Number(producto.precio_rebaja)
         : null,
-    status: p.estado || "Activo",
-    category: p.categoria || "",
-    description: p.descripcion || "",
-    stockTotal: Number(p.stock_total || 0),
-    heroUrl: p.imagen_principal || "",
+    status: producto.estado || "Activo",
+    category: producto.categoria || "",
+    description: producto.descripcion || "",
+    stockTotal: Number(producto.stock_total || 0),
+    heroUrl: producto.imagen_principal || "",
     gallery: imagenes.map((img) => ({
       id: img.id,
       url: img.imagen,
@@ -96,13 +99,9 @@ function toUiProduct(p) {
       colors,
       sizes,
       stockMap,
-      totalStock: Number(p.stock_total || 0),
-      totalColors: Number(
-        p.total_colores !== undefined ? p.total_colores : colors.length,
-      ),
-      totalSizes: Number(
-        p.total_tallas !== undefined ? p.total_tallas : sizes.length,
-      ),
+      totalStock: Number(producto.stock_total || 0),
+      totalColors: colors.length,
+      totalSizes: sizes.length,
     },
   };
 }
@@ -111,7 +110,6 @@ function toApiPayload(ui) {
   const colors = ui?.variants?.colors || [];
   const sizes = ui?.variants?.sizes || [];
   const stockMap = ui?.variants?.stockMap || {};
-
   const variantes = [];
 
   colors.forEach((color) => {
@@ -180,7 +178,7 @@ export default function Productos() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedQ(q.trim());
-    }, 350);
+    }, 300);
 
     return () => window.clearTimeout(timer);
   }, [q]);
@@ -217,8 +215,8 @@ export default function Productos() {
 
         aplicarRespuestaListado(data, paginaActual);
       } catch (err) {
-        setError("No se pudieron cargar los productos.");
         console.error(err);
+        setError(err?.message || "No se pudieron cargar los productos.");
       } finally {
         setLoading(false);
       }
@@ -245,11 +243,12 @@ export default function Productos() {
         );
 
         if (!activo) return;
+
         aplicarRespuestaListado(data, page);
       } catch (err) {
         if (!activo || err?.name === "AbortError") return;
-        setError("No se pudieron cargar los productos.");
         console.error(err);
+        setError(err?.message || "No se pudieron cargar los productos.");
       } finally {
         if (activo) {
           setLoading(false);
@@ -316,18 +315,18 @@ export default function Productos() {
     }
   }
 
-  function handleOpenView(p) {
-    setSelected(p);
+  function handleOpenView(producto) {
+    setSelected(producto);
     setOpenEdit(false);
     setOpenView(true);
-    cargarDetalleProducto(p);
+    cargarDetalleProducto(producto);
   }
 
-  function handleOpenEdit(p) {
-    setSelected(p);
+  function handleOpenEdit(producto) {
+    setSelected(producto);
     setOpenView(false);
     setOpenEdit(true);
-    cargarDetalleProducto(p);
+    cargarDetalleProducto(producto);
   }
 
   function handleCloseView() {
@@ -347,13 +346,13 @@ export default function Productos() {
       const stockTotal =
         payload?.variants?.totalStock ??
         Object.values(payload?.variants?.stockMap ?? {}).reduce(
-          (a, b) => a + Number(b || 0),
+          (acc, value) => acc + Number(value || 0),
           0,
         );
 
       const ui = {
         title: payload.title,
-        sku: payload.sku || "—",
+        sku: payload.sku,
         cost: Number(payload.cost || 0),
         price: Number(payload.price || 0),
         salePrice:
@@ -380,9 +379,6 @@ export default function Productos() {
       } else {
         await recargarPaginaActual(1);
       }
-    } catch (err) {
-      console.error(err);
-      throw err;
     } finally {
       setGuardando(false);
     }
@@ -406,9 +402,6 @@ export default function Productos() {
 
       setSelected(productoUi);
       setOpenEdit(false);
-    } catch (err) {
-      console.error(err);
-      alert(err.message || "No se pudo actualizar el producto.");
     } finally {
       setGuardando(false);
     }
@@ -447,14 +440,14 @@ export default function Productos() {
   const totalMostrado = useMemo(() => products.length, [products]);
 
   return (
-    <div className="space-y-6 animate-fadeIn">
+    <div className="animate-fadeIn space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Productos</h1>
           <p className="text-sm text-zinc-500">Inventario de productos</p>
         </div>
 
-        <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           <div className="relative w-full sm:w-80">
             <Search
               className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500"
@@ -462,17 +455,19 @@ export default function Productos() {
             />
             <input
               value={q}
-              onChange={(e) => setQ(e.target.value)}
-              className="w-full rounded-xl border bg-white pl-10 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
+              onChange={(event) => setQ(event.target.value)}
+              className="w-full rounded-xl border bg-white py-2 pl-10 pr-3 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
               placeholder="Buscar por SKU, ID o nombre"
             />
           </div>
 
           <button
+            type="button"
             onClick={() => setOpenNew(true)}
-            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 text-white px-4 py-2 text-sm hover:opacity-95 active:scale-[0.98] transition"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-sm text-white transition hover:opacity-95 active:scale-[0.98] sm:w-auto"
           >
-            <Plus size={16} /> Nuevo producto
+            <Plus size={16} />
+            Nuevo producto
           </button>
         </div>
       </div>
@@ -492,19 +487,19 @@ export default function Productos() {
           </div>
         ) : esMobile ? (
           <div className="space-y-3">
-            {products.map((p) => (
-              <div key={p.apiId} className="rounded-2xl border bg-white p-4">
+            {products.map((producto) => (
+              <div key={producto.apiId} className="rounded-2xl border bg-white p-4">
                 <div className="flex items-start gap-3">
-                  <div className="h-16 w-16 rounded-2xl border bg-zinc-100 overflow-hidden flex-none">
-                    {p.heroUrl ? (
+                  <div className="h-16 w-16 flex-none overflow-hidden rounded-2xl border bg-zinc-100">
+                    {producto.heroUrl ? (
                       <img
-                        src={p.heroUrl}
-                        alt={p.title}
+                        src={producto.heroUrl}
+                        alt={producto.title}
                         className="h-full w-full object-cover"
                         loading="lazy"
                       />
                     ) : (
-                      <div className="h-full w-full grid place-items-center text-xs text-zinc-500">
+                      <div className="grid h-full w-full place-items-center text-xs text-zinc-500">
                         Sin foto
                       </div>
                     )}
@@ -513,53 +508,57 @@ export default function Productos() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <div className="font-semibold truncate">{p.title}</div>
-                        <div className="text-xs text-zinc-500 truncate">
-                          {p.id} · SKU: {p.sku}
+                        <div className="truncate font-semibold">{producto.title}</div>
+                        <div className="truncate text-xs text-zinc-500">
+                          {producto.id} · SKU: {producto.sku}
                         </div>
-                        <div className="text-[11px] text-zinc-500 truncate mt-1">
-                          {p.variants?.totalColors ?? 0} colores ·{" "}
-                          {p.variants?.totalSizes ?? 0} tallas
+                        <div className="mt-1 truncate text-[11px] text-zinc-500">
+                          {producto.variants?.totalColors ?? 0} colores ·{" "}
+                          {producto.variants?.totalSizes ?? 0} tallas
                         </div>
                       </div>
-                      {statusBadge(p.status)}
+
+                      {statusBadge(producto.status)}
                     </div>
 
                     <div className="mt-2 flex items-center justify-between">
                       <div>
                         <div className="text-xs text-zinc-500">Precio</div>
                         <div className="font-semibold">
-                          ${Number(p.price).toLocaleString()}
+                          ${Number(producto.price).toLocaleString()}
                         </div>
                       </div>
 
                       <div className="text-right">
                         <div className="text-xs text-zinc-500">Stock</div>
-                        <div className="flex items-center gap-2 justify-end">
-                          <span className="font-semibold">{p.stockTotal}</span>
-                          {stockBadge(p.stockTotal)}
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="font-semibold">{producto.stockTotal}</span>
+                          {stockBadge(producto.stockTotal)}
                         </div>
                       </div>
                     </div>
 
                     <div className="mt-3 grid grid-cols-3 gap-2">
                       <button
-                        onClick={() => handleOpenView(p)}
-                        className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50 active:scale-[0.98] transition"
+                        type="button"
+                        onClick={() => handleOpenView(producto)}
+                        className="rounded-xl border px-4 py-2 text-sm transition hover:bg-zinc-50 active:scale-[0.98]"
                       >
                         Ver
                       </button>
 
                       <button
-                        onClick={() => handleOpenEdit(p)}
-                        className="rounded-xl bg-zinc-900 text-white px-4 py-2 text-sm hover:opacity-95 active:scale-[0.98] transition"
+                        type="button"
+                        onClick={() => handleOpenEdit(producto)}
+                        className="rounded-xl bg-zinc-900 px-4 py-2 text-sm text-white transition hover:opacity-95 active:scale-[0.98]"
                       >
                         Editar
                       </button>
 
                       <button
-                        onClick={() => handleDelete(p)}
-                        className="rounded-xl border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 active:scale-[0.98] transition"
+                        type="button"
+                        onClick={() => handleDelete(producto)}
+                        className="rounded-xl border border-red-200 px-4 py-2 text-sm text-red-600 transition hover:bg-red-50 active:scale-[0.98]"
                       >
                         Eliminar
                       </button>
@@ -575,12 +574,12 @@ export default function Productos() {
               <thead className="bg-zinc-50">
                 <tr>
                   {["ID", "Producto", "Stock", "Precio", "Estado", "Acciones"].map(
-                    (h) => (
+                    (head) => (
                       <th
-                        key={h}
-                        className="text-left px-4 py-3 font-semibold text-zinc-700"
+                        key={head}
+                        className="px-4 py-3 text-left font-semibold text-zinc-700"
                       >
-                        {h}
+                        {head}
                       </th>
                     ),
                   )}
@@ -588,38 +587,38 @@ export default function Productos() {
               </thead>
 
               <tbody className="bg-white">
-                {products.map((p) => (
+                {products.map((producto) => (
                   <tr
-                    key={p.apiId}
-                    className="border-t hover:bg-zinc-50 transition-colors"
+                    key={producto.apiId}
+                    className="border-t transition-colors hover:bg-zinc-50"
                   >
-                    <td className="px-4 py-3">{p.id}</td>
+                    <td className="px-4 py-3">{producto.id}</td>
 
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="h-12 w-12 rounded-xl border bg-zinc-100 overflow-hidden flex-none">
-                          {p.heroUrl ? (
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="h-12 w-12 flex-none overflow-hidden rounded-xl border bg-zinc-100">
+                          {producto.heroUrl ? (
                             <img
-                              src={p.heroUrl}
-                              alt={p.title}
+                              src={producto.heroUrl}
+                              alt={producto.title}
                               className="h-full w-full object-cover"
                               loading="lazy"
                             />
                           ) : (
-                            <div className="h-full w-full grid place-items-center text-[10px] text-zinc-500">
+                            <div className="grid h-full w-full place-items-center text-[10px] text-zinc-500">
                               Sin
                             </div>
                           )}
                         </div>
 
                         <div className="min-w-0">
-                          <div className="font-semibold truncate">{p.title}</div>
-                          <div className="text-xs text-zinc-500 truncate">
-                            SKU: {p.sku}
+                          <div className="truncate font-semibold">{producto.title}</div>
+                          <div className="truncate text-xs text-zinc-500">
+                            SKU: {producto.sku}
                           </div>
-                          <div className="text-[11px] text-zinc-500 truncate">
-                            {p.variants?.totalColors ?? 0} colores ·{" "}
-                            {p.variants?.totalSizes ?? 0} tallas
+                          <div className="truncate text-[11px] text-zinc-500">
+                            {producto.variants?.totalColors ?? 0} colores ·{" "}
+                            {producto.variants?.totalSizes ?? 0} tallas
                           </div>
                         </div>
                       </div>
@@ -627,46 +626,52 @@ export default function Productos() {
 
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold">{p.stockTotal}</span>
-                        {stockBadge(p.stockTotal)}
+                        <span className="font-semibold">{producto.stockTotal}</span>
+                        {stockBadge(producto.stockTotal)}
                       </div>
                     </td>
 
                     <td className="px-4 py-3">
                       <div className="font-semibold">
-                        ${Number(p.price).toLocaleString()}
+                        ${Number(producto.price).toLocaleString()}
                       </div>
 
-                      {p.salePrice !== null ? (
+                      {producto.salePrice !== null ? (
                         <div className="text-xs text-zinc-500">
-                          Rebaja: ${Number(p.salePrice).toLocaleString()}
+                          Rebaja: ${Number(producto.salePrice).toLocaleString()}
                         </div>
                       ) : null}
                     </td>
 
-                    <td className="px-4 py-3">{statusBadge(p.status)}</td>
+                    <td className="px-4 py-3">{statusBadge(producto.status)}</td>
 
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => handleOpenView(p)}
-                          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs hover:bg-zinc-50 active:scale-[0.98] transition"
+                          type="button"
+                          onClick={() => handleOpenView(producto)}
+                          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs transition hover:bg-zinc-50 active:scale-[0.98]"
                         >
-                          <Eye size={14} /> Ver
+                          <Eye size={14} />
+                          Ver
                         </button>
 
                         <button
-                          onClick={() => handleOpenEdit(p)}
-                          className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 text-white px-3 py-2 text-xs hover:opacity-95 active:scale-[0.98] transition"
+                          type="button"
+                          onClick={() => handleOpenEdit(producto)}
+                          className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-3 py-2 text-xs text-white transition hover:opacity-95 active:scale-[0.98]"
                         >
-                          <Pencil size={14} /> Editar
+                          <Pencil size={14} />
+                          Editar
                         </button>
 
                         <button
-                          onClick={() => handleDelete(p)}
-                          className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-3 py-2 text-xs text-red-600 hover:bg-red-50 active:scale-[0.98] transition"
+                          type="button"
+                          onClick={() => handleDelete(producto)}
+                          className="inline-flex items-center gap-2 rounded-xl border border-red-200 px-3 py-2 text-xs text-red-600 transition hover:bg-red-50 active:scale-[0.98]"
                         >
-                          <Trash2 size={14} /> Eliminar
+                          <Trash2 size={14} />
+                          Eliminar
                         </button>
                       </div>
                     </td>
@@ -678,7 +683,7 @@ export default function Productos() {
         )}
 
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-xs text-zinc-500 flex items-center gap-3">
+          <div className="flex items-center gap-3 text-xs text-zinc-500">
             <span>Total general: {pageInfo.count}</span>
             <span>Mostrando: {totalMostrado}</span>
             <span>
@@ -690,18 +695,20 @@ export default function Productos() {
 
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => setPage((prev) => Math.max(1, prev - 1))}
               disabled={!pageInfo.hasPrevious || loading}
-              className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <ChevronLeft size={16} />
               Anterior
             </button>
 
             <button
+              type="button"
               onClick={() => setPage((prev) => prev + 1)}
               disabled={!pageInfo.hasNext || loading}
-              className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Siguiente
               <ChevronRight size={16} />
@@ -732,6 +739,7 @@ export default function Productos() {
         open={openEdit}
         product={selected}
         loading={cargandoDetalle}
+        saving={guardando}
         onClose={handleCloseEdit}
         onSave={handleUpdate}
       />
