@@ -39,6 +39,13 @@ function normalizarTexto(valor) {
   return String(valor || "").trim().toLowerCase();
 }
 
+function normalizarListaRespuesta(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
+}
+
 function SaleViewModal({ open, onClose, sale }) {
   if (!sale) return null;
 
@@ -196,11 +203,13 @@ export default function Ventas() {
         obtenerVentas(),
       ]);
 
-      setProducts(productosData || []);
-      setSales(ventasData || []);
+      setProducts(normalizarListaRespuesta(productosData));
+      setSales(normalizarListaRespuesta(ventasData));
     } catch (err) {
       console.error(err);
       setError(err.message || "No se pudieron cargar las ventas.");
+      setProducts([]);
+      setSales([]);
     } finally {
       setLoading(false);
     }
@@ -209,7 +218,7 @@ export default function Ventas() {
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
 
-    return (sales || []).filter((v) => {
+    return (Array.isArray(sales) ? sales : []).filter((v) => {
       const okQuery =
         !query ||
         String(v.folio || "").toLowerCase().includes(query) ||
@@ -223,13 +232,15 @@ export default function Ventas() {
   }, [sales, q, estado]);
 
   const getStockForEdit = (sale, productId, color, talla) => {
-    const p = (products || []).find((x) => String(x.id) === String(productId));
+    const p = (Array.isArray(products) ? products : []).find(
+      (x) => String(x.id) === String(productId)
+    );
     const variantes = Array.isArray(p?.variantes) ? p.variantes : [];
 
     const variante = variantes.find(
       (v) =>
         normalizarTexto(v.color) === normalizarTexto(color) &&
-        normalizarTexto(v.talla) === normalizarTexto(talla),
+        normalizarTexto(v.talla) === normalizarTexto(talla)
     );
 
     const base = Number(variante?.stock || 0);
@@ -239,10 +250,8 @@ export default function Ventas() {
     const extra = (sale.detalles || []).reduce((acc, it) => {
       const sameProduct =
         String(it.producto?.id || it.producto_id) === String(productId);
-      const sameColor =
-        normalizarTexto(it.color) === normalizarTexto(color);
-      const sameTalla =
-        normalizarTexto(it.talla) === normalizarTexto(talla);
+      const sameColor = normalizarTexto(it.color) === normalizarTexto(color);
+      const sameTalla = normalizarTexto(it.talla) === normalizarTexto(talla);
 
       if (!sameProduct || !sameColor || !sameTalla) {
         return acc;
@@ -256,13 +265,13 @@ export default function Ventas() {
 
   async function refrescarProductos() {
     const productosActualizados = await obtenerProductos();
-    setProducts(productosActualizados || []);
+    setProducts(normalizarListaRespuesta(productosActualizados));
   }
 
   async function handleCreate(payload) {
     try {
       const creada = await crearVenta(payload);
-      setSales((prev) => [creada, ...prev]);
+      setSales((prev) => [creada, ...(Array.isArray(prev) ? prev : [])]);
       setOpenNew(false);
 
       if (creada.metodo_pago === "MERCADO_PAGO" && creada.estado !== "PAGADA") {
@@ -286,7 +295,9 @@ export default function Ventas() {
       const actualizada = await actualizarVenta(saleId, payload);
 
       setSales((prev) =>
-        prev.map((item) => (item.id === actualizada.id ? actualizada : item))
+        (Array.isArray(prev) ? prev : []).map((item) =>
+          item.id === actualizada.id ? actualizada : item
+        )
       );
 
       await refrescarProductos();
@@ -304,7 +315,7 @@ export default function Ventas() {
 
     try {
       await eliminarVenta(saleId);
-      setSales((prev) => prev.filter((item) => item.id !== saleId));
+      setSales((prev) => (Array.isArray(prev) ? prev : []).filter((item) => item.id !== saleId));
       await refrescarProductos();
     } catch (err) {
       console.error(err);
@@ -468,16 +479,15 @@ export default function Ventas() {
                             Editar
                           </button>
 
-                          {v.metodo_pago === "MERCADO_PAGO" &&
-                            v.estado === "PENDIENTE" && (
-                              <button
-                                onClick={() => handleCobrar(v.id)}
-                                className="inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-xs hover:bg-zinc-50"
-                              >
-                                <CreditCard size={14} />
-                                Cobrar
-                              </button>
-                            )}
+                          {v.metodo_pago === "MERCADO_PAGO" && v.estado === "PENDIENTE" && (
+                            <button
+                              onClick={() => handleCobrar(v.id)}
+                              className="inline-flex items-center gap-1 rounded-lg border px-3 py-1 text-xs hover:bg-zinc-50"
+                            >
+                              <CreditCard size={14} />
+                              Cobrar
+                            </button>
+                          )}
 
                           <button
                             onClick={() => handleDelete(v.id)}
@@ -627,9 +637,7 @@ export default function Ventas() {
         mode="edit"
         initialSale={selected}
         onUpdate={handleUpdate}
-        getStockFor={(pid, color, talla) =>
-          getStockForEdit(selected, pid, color, talla)
-        }
+        getStockFor={(pid, color, talla) => getStockForEdit(selected, pid, color, talla)}
       />
     </div>
   );

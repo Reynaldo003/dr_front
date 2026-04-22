@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Modal from "../ui/Modal";
 import Badge from "../ui/Badge";
 import { Plus, Trash2 } from "lucide-react";
@@ -41,11 +41,17 @@ export default function NewSaleModal({
 }) {
   const isEdit = mode === "edit";
 
+  const listaProductos = useMemo(() => {
+    return Array.isArray(productos) ? productos : [];
+  }, [productos]);
+
+  const hayProductos = listaProductos.length > 0;
+
   const productMap = useMemo(() => {
     const mapa = new Map();
-    (productos || []).forEach((p) => mapa.set(String(p.id), p));
+    listaProductos.forEach((p) => mapa.set(String(p.id), p));
     return mapa;
-  }, [productos]);
+  }, [listaProductos]);
 
   function getVariantesProducto(productId) {
     const producto = productMap.get(String(productId));
@@ -53,7 +59,7 @@ export default function NewSaleModal({
   }
 
   function getFirstProductId() {
-    return productos?.[0]?.id ? String(productos[0].id) : "";
+    return listaProductos[0]?.id ? String(listaProductos[0].id) : "";
   }
 
   function getFirstVariant(productId) {
@@ -92,7 +98,7 @@ export default function NewSaleModal({
         variantes
           .filter((v) => normalizarTexto(v.color) === colorNormalizado)
           .map((v) => v.talla)
-          .filter(Boolean),
+          .filter(Boolean)
       ),
     ];
   }
@@ -108,7 +114,7 @@ export default function NewSaleModal({
     const encontrada = variantes.find(
       (v) =>
         normalizarTexto(v.color) === normalizarTexto(color) &&
-        normalizarTexto(v.talla) === normalizarTexto(talla),
+        normalizarTexto(v.talla) === normalizarTexto(talla)
     );
 
     return Number(encontrada?.stock || 0);
@@ -128,7 +134,7 @@ export default function NewSaleModal({
   const [fecha, setFecha] = useState(isoToday());
   const [metodoPago, setMetodoPago] = useState("MERCADO_PAGO");
   const [estado, setEstado] = useState("PENDIENTE");
-  const [items, setItems] = useState([getDefaultItem()]);
+  const [items, setItems] = useState([]);
 
   const mustValidateStock = estado === "PAGADA";
 
@@ -159,7 +165,9 @@ export default function NewSaleModal({
             talla: it.talla || "",
             qty: Number(it.cantidad || 1),
           }))
-          : [getDefaultItem()];
+          : hayProductos
+            ? [getDefaultItem()]
+            : [];
 
       setItems(safeItems);
     } else {
@@ -175,9 +183,9 @@ export default function NewSaleModal({
       setFecha(isoToday());
       setMetodoPago("MERCADO_PAGO");
       setEstado("PENDIENTE");
-      setItems([getDefaultItem()]);
+      setItems(hayProductos ? [getDefaultItem()] : []);
     }
-  }, [open, isEdit, initialSale, productos]);
+  }, [open, isEdit, initialSale, hayProductos, listaProductos]);
 
   const total = useMemo(() => {
     return items.reduce((acc, it) => {
@@ -188,6 +196,7 @@ export default function NewSaleModal({
   }, [items, productMap]);
 
   const addItem = () => {
+    if (!hayProductos) return;
     setItems((prev) => [...prev, getDefaultItem()]);
   };
 
@@ -196,9 +205,7 @@ export default function NewSaleModal({
   };
 
   const updateItem = (idx, patch) => {
-    setItems((prev) =>
-      prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)),
-    );
+    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   };
 
   const handleProductChange = (idx, productId) => {
@@ -253,22 +260,18 @@ export default function NewSaleModal({
 
     for (const item of counts.values()) {
       const p = productMap.get(String(item.productId));
-      const disponible = getStockVariante(
-        item.productId,
-        item.color,
-        item.talla,
-      );
+      const disponible = getStockVariante(item.productId, item.color, item.talla);
 
       if (disponible <= 0) {
         issues.push(
-          `"${p?.titulo || item.productId}" / ${item.color} / ${item.talla} está sin stock.`,
+          `"${p?.titulo || item.productId}" / ${item.color} / ${item.talla} está sin stock.`
         );
         continue;
       }
 
       if (item.qty > disponible) {
         issues.push(
-          `Stock insuficiente para "${p?.titulo || item.productId}" / ${item.color} / ${item.talla}. Solo quedan ${disponible}.`,
+          `Stock insuficiente para "${p?.titulo || item.productId}" / ${item.color} / ${item.talla}. Solo quedan ${disponible}.`
         );
       }
     }
@@ -277,6 +280,7 @@ export default function NewSaleModal({
   }, [items, productMap, getStockFor, mustValidateStock]);
 
   const canSave =
+    hayProductos &&
     cliente.trim().length >= 2 &&
     items.length > 0 &&
     total > 0 &&
@@ -286,7 +290,7 @@ export default function NewSaleModal({
         it.productId &&
         String(it.color || "").trim() &&
         String(it.talla || "").trim() &&
-        Number(it.qty) > 0,
+        Number(it.qty) > 0
     );
 
   const handleSave = () => {
@@ -358,6 +362,13 @@ export default function NewSaleModal({
         </div>
       }
     >
+      {!hayProductos && (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          No hay productos cargados todavía. Primero asegúrate de que el endpoint de productos
+          esté devolviendo una lista válida.
+        </div>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block">
           <span className="text-xs font-medium text-zinc-700">Cliente</span>
@@ -505,7 +516,8 @@ export default function NewSaleModal({
           <button
             onClick={addItem}
             type="button"
-            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50 active:scale-[0.98] transition"
+            disabled={!hayProductos}
+            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Plus size={16} />
             Agregar
@@ -528,11 +540,7 @@ export default function NewSaleModal({
 
             const colores = getColoresProducto(it.productId);
             const tallas = getTallasProducto(it.productId, it.color);
-            const stockVariante = getStockVariante(
-              it.productId,
-              it.color,
-              it.talla,
-            );
+            const stockVariante = getStockVariante(it.productId, it.color, it.talla);
 
             return (
               <div key={idx} className="rounded-2xl border p-3">
@@ -544,11 +552,15 @@ export default function NewSaleModal({
                       onChange={(e) => handleProductChange(idx, e.target.value)}
                       className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
                     >
-                      {(productos || []).map((producto) => (
-                        <option key={producto.id} value={String(producto.id)}>
-                          {producto.titulo} · {money(producto.precio)}
-                        </option>
-                      ))}
+                      {hayProductos ? (
+                        listaProductos.map((producto) => (
+                          <option key={producto.id} value={String(producto.id)}>
+                            {producto.titulo} · {money(producto.precio)}
+                          </option>
+                        ))
+                      ) : (
+                        <option value="">Sin productos disponibles</option>
+                      )}
                     </select>
                   </label>
 
@@ -556,9 +568,7 @@ export default function NewSaleModal({
                     <span className="text-xs font-medium text-zinc-700">Color</span>
                     <select
                       value={it.color}
-                      onChange={(e) =>
-                        handleColorChange(idx, it.productId, e.target.value)
-                      }
+                      onChange={(e) => handleColorChange(idx, it.productId, e.target.value)}
                       className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
                     >
                       {colores.length > 0 ? (
@@ -598,14 +608,11 @@ export default function NewSaleModal({
                       type="number"
                       min={1}
                       value={it.qty}
-                      onChange={(e) =>
-                        updateItem(idx, { qty: Number(e.target.value) })
-                      }
+                      onChange={(e) => updateItem(idx, { qty: Number(e.target.value) })}
                       className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
                     />
                     <div className="mt-2 text-[11px] text-zinc-500">
-                      Stock variante:{" "}
-                      <span className="font-medium">{stockVariante}</span>
+                      Stock variante: <span className="font-medium">{stockVariante}</span>
                     </div>
                   </label>
 
