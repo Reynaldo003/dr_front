@@ -46,6 +46,27 @@ function normalizarListaRespuesta(data) {
   return [];
 }
 
+function normalizarProductoVenta(producto) {
+  const variantesRaw = Array.isArray(producto?.variantes)
+    ? producto.variantes
+    : Array.isArray(producto?.variants)
+      ? producto.variants
+      : [];
+
+  return {
+    ...producto,
+    id: Number(producto?.id || 0),
+    titulo: producto?.titulo || producto?.title || "",
+    precio: Number(producto?.precio ?? producto?.price ?? 0),
+    variantes: variantesRaw.map((item) => ({
+      id: item?.id,
+      color: item?.color || "",
+      talla: item?.talla || "",
+      stock: Number(item?.stock || 0),
+    })),
+  };
+}
+
 function SaleViewModal({ open, onClose, sale }) {
   if (!sale) return null;
 
@@ -199,11 +220,13 @@ export default function Ventas() {
       setError("");
 
       const [productosData, ventasData] = await Promise.all([
-        obtenerProductos(),
+        obtenerProductos({ page: 1, page_size: 200 }),
         obtenerVentas(),
       ]);
 
-      setProducts(normalizarListaRespuesta(productosData));
+      setProducts(
+        normalizarListaRespuesta(productosData).map(normalizarProductoVenta)
+      );
       setSales(normalizarListaRespuesta(ventasData));
     } catch (err) {
       console.error(err);
@@ -264,8 +287,10 @@ export default function Ventas() {
   };
 
   async function refrescarProductos() {
-    const productosActualizados = await obtenerProductos();
-    setProducts(normalizarListaRespuesta(productosActualizados));
+    const productosActualizados = await obtenerProductos({ page: 1, page_size: 200 });
+    setProducts(
+      normalizarListaRespuesta(productosActualizados).map(normalizarProductoVenta)
+    );
   }
 
   async function handleCreate(payload) {

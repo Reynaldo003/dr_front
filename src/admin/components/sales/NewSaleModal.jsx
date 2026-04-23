@@ -1,32 +1,108 @@
 import { useEffect, useMemo, useState } from "react";
-import Modal from "../ui/Modal";
-import Badge from "../ui/Badge";
-import { Plus, Trash2 } from "lucide-react";
-
-function isoToday() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+import { Plus, Trash2, X } from "lucide-react";
 
 function money(n) {
-  return `$${Number(n || 0).toLocaleString()}`;
-}
-
-function StockAlert({ msg }) {
-  if (!msg) return null;
-
-  return (
-    <div className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-      {msg}
-    </div>
-  );
+  return `$${Number(n || 0).toLocaleString("es-MX")}`;
 }
 
 function normalizarTexto(valor) {
   return String(valor || "").trim().toLowerCase();
+}
+
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
+function normalizarProducto(producto) {
+  const variantesRaw = Array.isArray(producto?.variantes)
+    ? producto.variantes
+    : Array.isArray(producto?.variants)
+      ? producto.variants
+      : [];
+
+  return {
+    id: Number(producto?.id || 0),
+    titulo: producto?.titulo || producto?.title || "Producto",
+    sku: producto?.sku || "",
+    precio: Number(producto?.precio ?? producto?.price ?? 0),
+    imagen:
+      producto?.imagen_principal ||
+      producto?.heroUrl ||
+      producto?.image ||
+      "",
+    variantes: variantesRaw.map((item) => ({
+      id: item?.id,
+      color: item?.color || "",
+      talla: item?.talla || "",
+      stock: Number(item?.stock || 0),
+    })),
+  };
+}
+
+function crearDetalleVacio(productos) {
+  const producto = productos[0] || null;
+  const primeraVariante = producto?.variantes?.[0] || null;
+
+  return {
+    id: `${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    producto_id: producto?.id || "",
+    color: primeraVariante?.color || "",
+    talla: primeraVariante?.talla || "",
+    cantidad: 1,
+  };
+}
+
+function buildInitialState(productos, sale) {
+  if (!sale) {
+    return {
+      cliente: "",
+      cliente_email: "",
+      cliente_telefono: "",
+      direccion_linea1: "",
+      direccion_linea2: "",
+      ciudad: "",
+      estado_direccion: "",
+      codigo_postal: "",
+      referencias_envio: "",
+      tipo_envio: "ESTANDAR",
+      costo_envio: 0,
+      fecha_venta: new Date().toISOString().slice(0, 10),
+      estado: "PENDIENTE",
+      estado_envio: "PENDIENTE",
+      metodo_pago: "MERCADO_PAGO",
+      detalles: [crearDetalleVacio(productos)],
+    };
+  }
+
+  const detalles = Array.isArray(sale?.detalles) ? sale.detalles : [];
+
+  return {
+    cliente: sale?.cliente || "",
+    cliente_email: sale?.cliente_email || "",
+    cliente_telefono: sale?.cliente_telefono || "",
+    direccion_linea1: sale?.direccion_linea1 || "",
+    direccion_linea2: sale?.direccion_linea2 || "",
+    ciudad: sale?.ciudad || "",
+    estado_direccion: sale?.estado_direccion || "",
+    codigo_postal: sale?.codigo_postal || "",
+    referencias_envio: sale?.referencias_envio || "",
+    tipo_envio: sale?.tipo_envio || "ESTANDAR",
+    costo_envio: Number(sale?.costo_envio || 0),
+    fecha_venta: sale?.fecha_venta || new Date().toISOString().slice(0, 10),
+    estado: sale?.estado || "PENDIENTE",
+    estado_envio: sale?.estado_envio || "PENDIENTE",
+    metodo_pago: sale?.metodo_pago || "MERCADO_PAGO",
+    detalles:
+      detalles.length > 0
+        ? detalles.map((item, index) => ({
+          id: `${Date.now()}_${index}_${Math.random().toString(16).slice(2)}`,
+          producto_id: Number(item?.producto?.id || item?.producto_id || ""),
+          color: item?.color || "",
+          talla: item?.talla || "",
+          cantidad: Number(item?.cantidad || 1),
+        }))
+        : [crearDetalleVacio(productos)],
+  };
 }
 
 export default function NewSaleModal({
@@ -39,612 +115,611 @@ export default function NewSaleModal({
   onUpdate,
   getStockFor,
 }) {
-  const isEdit = mode === "edit";
-
-  const listaProductos = useMemo(() => {
-    return Array.isArray(productos) ? productos : [];
+  const productosNormalizados = useMemo(() => {
+    return (Array.isArray(productos) ? productos : [])
+      .map(normalizarProducto)
+      .filter((item) => item.id);
   }, [productos]);
 
-  const hayProductos = listaProductos.length > 0;
-
-  const productMap = useMemo(() => {
-    const mapa = new Map();
-    listaProductos.forEach((p) => mapa.set(String(p.id), p));
-    return mapa;
-  }, [listaProductos]);
-
-  function getVariantesProducto(productId) {
-    const producto = productMap.get(String(productId));
-    return Array.isArray(producto?.variantes) ? producto.variantes : [];
-  }
-
-  function getFirstProductId() {
-    return listaProductos[0]?.id ? String(listaProductos[0].id) : "";
-  }
-
-  function getFirstVariant(productId) {
-    const variantes = getVariantesProducto(productId);
-    const primera = variantes[0];
-
-    return {
-      color: primera?.color || "",
-      talla: primera?.talla || "",
-    };
-  }
-
-  function getDefaultItem() {
-    const productId = getFirstProductId();
-    const firstVariant = getFirstVariant(productId);
-
-    return {
-      productId,
-      color: firstVariant.color,
-      talla: firstVariant.talla,
-      qty: 1,
-    };
-  }
-
-  function getColoresProducto(productId) {
-    const variantes = getVariantesProducto(productId);
-    return [...new Set(variantes.map((v) => v.color).filter(Boolean))];
-  }
-
-  function getTallasProducto(productId, color) {
-    const variantes = getVariantesProducto(productId);
-    const colorNormalizado = normalizarTexto(color);
-
-    return [
-      ...new Set(
-        variantes
-          .filter((v) => normalizarTexto(v.color) === colorNormalizado)
-          .map((v) => v.talla)
-          .filter(Boolean)
-      ),
-    ];
-  }
-
-  function getStockVariante(productId, color, talla) {
-    if (!productId || !color || !talla) return 0;
-
-    if (typeof getStockFor === "function") {
-      return Number(getStockFor(productId, color, talla) || 0);
-    }
-
-    const variantes = getVariantesProducto(productId);
-    const encontrada = variantes.find(
-      (v) =>
-        normalizarTexto(v.color) === normalizarTexto(color) &&
-        normalizarTexto(v.talla) === normalizarTexto(talla)
-    );
-
-    return Number(encontrada?.stock || 0);
-  }
-
-  const [cliente, setCliente] = useState("");
-  const [clienteEmail, setClienteEmail] = useState("");
-  const [clienteTelefono, setClienteTelefono] = useState("");
-
-  const [direccionLinea1, setDireccionLinea1] = useState("");
-  const [direccionLinea2, setDireccionLinea2] = useState("");
-  const [ciudad, setCiudad] = useState("");
-  const [estadoDireccion, setEstadoDireccion] = useState("");
-  const [codigoPostal, setCodigoPostal] = useState("");
-  const [referenciasEnvio, setReferenciasEnvio] = useState("");
-
-  const [fecha, setFecha] = useState(isoToday());
-  const [metodoPago, setMetodoPago] = useState("MERCADO_PAGO");
-  const [estado, setEstado] = useState("PENDIENTE");
-  const [items, setItems] = useState([]);
-
-  const mustValidateStock = estado === "PAGADA";
+  const [form, setForm] = useState(() => buildInitialState(productosNormalizados, null));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
+    setForm(buildInitialState(productosNormalizados, initialSale));
+    setSaving(false);
+    setError("");
+  }, [open, initialSale, productosNormalizados]);
 
-    if (isEdit && initialSale) {
-      setCliente(initialSale.cliente || "");
-      setClienteEmail(initialSale.cliente_email || "");
-      setClienteTelefono(initialSale.cliente_telefono || "");
+  if (!open) return null;
 
-      setDireccionLinea1(initialSale.direccion_linea1 || "");
-      setDireccionLinea2(initialSale.direccion_linea2 || "");
-      setCiudad(initialSale.ciudad || "");
-      setEstadoDireccion(initialSale.estado_direccion || "");
-      setCodigoPostal(initialSale.codigo_postal || "");
-      setReferenciasEnvio(initialSale.referencias_envio || "");
+  function setField(name, value) {
+    setForm((prev) => ({ ...prev, [name]: value }));
+  }
 
-      setFecha(initialSale.fecha_venta || isoToday());
-      setMetodoPago(initialSale.metodo_pago || "MERCADO_PAGO");
-      setEstado(initialSale.estado || "PENDIENTE");
+  function getProducto(productoId) {
+    return productosNormalizados.find((item) => String(item.id) === String(productoId)) || null;
+  }
 
-      const safeItems =
-        Array.isArray(initialSale.detalles) && initialSale.detalles.length > 0
-          ? initialSale.detalles.map((it) => ({
-            productId: String(it.producto?.id || it.producto_id || ""),
-            color: it.color || "",
-            talla: it.talla || "",
-            qty: Number(it.cantidad || 1),
-          }))
-          : hayProductos
-            ? [getDefaultItem()]
-            : [];
+  function getColoresDisponibles(productoId) {
+    const producto = getProducto(productoId);
+    if (!producto) return [];
+    return unique(producto.variantes.map((item) => item.color));
+  }
 
-      setItems(safeItems);
-    } else {
-      setCliente("");
-      setClienteEmail("");
-      setClienteTelefono("");
-      setDireccionLinea1("");
-      setDireccionLinea2("");
-      setCiudad("");
-      setEstadoDireccion("");
-      setCodigoPostal("");
-      setReferenciasEnvio("");
-      setFecha(isoToday());
-      setMetodoPago("MERCADO_PAGO");
-      setEstado("PENDIENTE");
-      setItems(hayProductos ? [getDefaultItem()] : []);
-    }
-  }, [open, isEdit, initialSale, hayProductos, listaProductos]);
+  function getTallasDisponibles(productoId, color) {
+    const producto = getProducto(productoId);
+    if (!producto) return [];
 
-  const total = useMemo(() => {
-    return items.reduce((acc, it) => {
-      const p = productMap.get(String(it.productId));
-      const price = Number(p?.precio || 0);
-      return acc + price * (Number(it.qty) || 0);
-    }, 0);
-  }, [items, productMap]);
+    return unique(
+      producto.variantes
+        .filter((item) => normalizarTexto(item.color) === normalizarTexto(color))
+        .map((item) => item.talla)
+    );
+  }
 
-  const addItem = () => {
-    if (!hayProductos) return;
-    setItems((prev) => [...prev, getDefaultItem()]);
-  };
+  function getStockVariante(productoId, color, talla) {
+    if (!productoId || !color || !talla) return 0;
 
-  const removeItem = (idx) => {
-    setItems((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  const updateItem = (idx, patch) => {
-    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
-  };
-
-  const handleProductChange = (idx, productId) => {
-    const firstVariant = getFirstVariant(productId);
-
-    updateItem(idx, {
-      productId,
-      color: firstVariant.color,
-      talla: firstVariant.talla,
-      qty: 1,
-    });
-  };
-
-  const handleColorChange = (idx, productId, color) => {
-    const tallas = getTallasProducto(productId, color);
-    const talla = tallas[0] || "";
-
-    updateItem(idx, {
-      color,
-      talla,
-    });
-  };
-
-  const stockIssues = useMemo(() => {
-    if (!mustValidateStock) return [];
-
-    const issues = [];
-    const counts = new Map();
-
-    for (const it of items) {
-      const pid = String(it.productId || "");
-      const color = String(it.color || "");
-      const talla = String(it.talla || "");
-      const qty = Number(it.qty || 0);
-
-      if (!pid || qty <= 0) continue;
-
-      if (!color || !talla) {
-        const p = productMap.get(pid);
-        issues.push(`Debes seleccionar color y talla para "${p?.titulo || pid}".`);
-        continue;
-      }
-
-      const key = `${pid}__${normalizarTexto(color)}__${normalizarTexto(talla)}`;
-      counts.set(key, {
-        productId: pid,
-        color,
-        talla,
-        qty: (counts.get(key)?.qty || 0) + qty,
-      });
+    if (typeof getStockFor === "function") {
+      return Number(getStockFor(productoId, color, talla) || 0);
     }
 
-    for (const item of counts.values()) {
-      const p = productMap.get(String(item.productId));
-      const disponible = getStockVariante(item.productId, item.color, item.talla);
-
-      if (disponible <= 0) {
-        issues.push(
-          `"${p?.titulo || item.productId}" / ${item.color} / ${item.talla} está sin stock.`
-        );
-        continue;
-      }
-
-      if (item.qty > disponible) {
-        issues.push(
-          `Stock insuficiente para "${p?.titulo || item.productId}" / ${item.color} / ${item.talla}. Solo quedan ${disponible}.`
-        );
-      }
-    }
-
-    return issues;
-  }, [items, productMap, getStockFor, mustValidateStock]);
-
-  const canSave =
-    hayProductos &&
-    cliente.trim().length >= 2 &&
-    items.length > 0 &&
-    total > 0 &&
-    stockIssues.length === 0 &&
-    items.every(
-      (it) =>
-        it.productId &&
-        String(it.color || "").trim() &&
-        String(it.talla || "").trim() &&
-        Number(it.qty) > 0
+    const producto = getProducto(productoId);
+    const variante = producto?.variantes?.find(
+      (item) =>
+        normalizarTexto(item.color) === normalizarTexto(color) &&
+        normalizarTexto(item.talla) === normalizarTexto(talla)
     );
 
-  const handleSave = () => {
-    if (!canSave) return;
+    return Number(variante?.stock || 0);
+  }
 
-    const payload = {
-      cliente: cliente.trim(),
-      cliente_email: clienteEmail.trim(),
-      cliente_telefono: clienteTelefono.trim(),
-      direccion_linea1: direccionLinea1.trim(),
-      direccion_linea2: direccionLinea2.trim(),
-      ciudad: ciudad.trim(),
-      estado_direccion: estadoDireccion.trim(),
-      codigo_postal: codigoPostal.trim(),
-      referencias_envio: referenciasEnvio.trim(),
-      fecha_venta: fecha,
-      estado,
-      metodo_pago: metodoPago,
-      detalles: items.map((it) => ({
-        producto_id: Number(it.productId),
-        color: String(it.color || "").trim(),
-        talla: String(it.talla || "").trim(),
-        cantidad: Number(it.qty) || 0,
-      })),
-    };
+  function replaceDetalle(detalleId, patch) {
+    setForm((prev) => ({
+      ...prev,
+      detalles: prev.detalles.map((item) =>
+        item.id === detalleId ? { ...item, ...patch } : item
+      ),
+    }));
+  }
 
-    if (isEdit && initialSale?.id) {
-      onUpdate?.(initialSale.id, payload);
+  function handleProductoChange(detalleId, productoId) {
+    const colores = getColoresDisponibles(productoId);
+    const primerColor = colores[0] || "";
+    const tallas = getTallasDisponibles(productoId, primerColor);
+    const primeraTalla = tallas[0] || "";
+
+    replaceDetalle(detalleId, {
+      producto_id: productoId,
+      color: primerColor,
+      talla: primeraTalla,
+      cantidad: 1,
+    });
+  }
+
+  function handleColorChange(detalleId, productoId, color) {
+    const tallas = getTallasDisponibles(productoId, color);
+    replaceDetalle(detalleId, {
+      color,
+      talla: tallas[0] || "",
+      cantidad: 1,
+    });
+  }
+
+  function handleTallaChange(detalleId, talla) {
+    replaceDetalle(detalleId, { talla, cantidad: 1 });
+  }
+
+  function handleCantidadChange(detalleId, cantidad) {
+    replaceDetalle(detalleId, {
+      cantidad: Math.max(1, Math.floor(Number(cantidad || 1))),
+    });
+  }
+
+  function addDetalle() {
+    setForm((prev) => ({
+      ...prev,
+      detalles: [...prev.detalles, crearDetalleVacio(productosNormalizados)],
+    }));
+  }
+
+  function removeDetalle(detalleId) {
+    setForm((prev) => {
+      const next = prev.detalles.filter((item) => item.id !== detalleId);
+      return {
+        ...prev,
+        detalles: next.length ? next : [crearDetalleVacio(productosNormalizados)],
+      };
+    });
+  }
+
+  const subtotal = useMemo(() => {
+    return form.detalles.reduce((acc, item) => {
+      const producto = getProducto(item.producto_id);
+      return acc + Number(producto?.precio || 0) * Number(item.cantidad || 0);
+    }, 0);
+  }, [form.detalles, productosNormalizados]);
+
+  const total = useMemo(() => {
+    return subtotal + Number(form.costo_envio || 0);
+  }, [subtotal, form.costo_envio]);
+
+  async function handleSubmit() {
+    if (saving) return;
+
+    const detallesLimpios = form.detalles.map((item) => ({
+      producto_id: Number(item.producto_id || 0),
+      color: String(item.color || "").trim(),
+      talla: String(item.talla || "").trim(),
+      cantidad: Number(item.cantidad || 0),
+    }));
+
+    if (!String(form.cliente || "").trim()) {
+      setError("El nombre del cliente es obligatorio.");
       return;
     }
 
-    onCreate?.(payload);
-  };
+    if (!String(form.fecha_venta || "").trim()) {
+      setError("La fecha de venta es obligatoria.");
+      return;
+    }
+
+    if (!detallesLimpios.length) {
+      setError("Debes agregar al menos un producto.");
+      return;
+    }
+
+    for (const item of detallesLimpios) {
+      if (!item.producto_id) {
+        setError("Debes seleccionar un producto en todos los renglones.");
+        return;
+      }
+
+      if (!item.color || !item.talla) {
+        setError("Debes seleccionar color y talla en todos los productos.");
+        return;
+      }
+
+      if (item.cantidad <= 0) {
+        setError("Todas las cantidades deben ser mayores a cero.");
+        return;
+      }
+    }
+
+    const payload = {
+      cliente: String(form.cliente || "").trim(),
+      cliente_email: String(form.cliente_email || "").trim(),
+      cliente_telefono: String(form.cliente_telefono || "").trim(),
+      direccion_linea1: String(form.direccion_linea1 || "").trim(),
+      direccion_linea2: String(form.direccion_linea2 || "").trim(),
+      ciudad: String(form.ciudad || "").trim(),
+      estado_direccion: String(form.estado_direccion || "").trim(),
+      codigo_postal: String(form.codigo_postal || "").trim(),
+      referencias_envio: String(form.referencias_envio || "").trim(),
+      tipo_envio: form.tipo_envio,
+      costo_envio: Number(form.costo_envio || 0),
+      fecha_venta: form.fecha_venta,
+      estado: form.estado,
+      estado_envio: form.estado_envio,
+      metodo_pago: form.metodo_pago,
+      detalles: detallesLimpios,
+    };
+
+    try {
+      setSaving(true);
+      setError("");
+
+      if (mode === "edit" && initialSale?.id) {
+        await onUpdate?.(initialSale.id, payload);
+      } else {
+        await onCreate?.(payload);
+      }
+    } catch (err) {
+      setError(err?.message || "No se pudo guardar la venta.");
+      setSaving(false);
+      return;
+    }
+
+    setSaving(false);
+  }
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={isEdit ? `Editar venta ${initialSale?.folio || ""}` : "Nueva venta"}
-      subtitle="Venta conectada al backend"
-      footer={
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm">
-            <span className="text-zinc-500">Total:</span>{" "}
-            <span className="font-semibold">{money(total)}</span>
+    <div className="fixed inset-0 z-50">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/40 animate-fadeIn"
+        onClick={onClose}
+      />
+
+      <div className="absolute inset-0 flex items-end justify-center p-0 sm:items-center sm:p-6">
+        <div className="flex h-[100dvh] w-full flex-col overflow-hidden border bg-white shadow-2xl animate-fadeUp sm:h-auto sm:max-h-[92vh] sm:max-w-6xl sm:rounded-3xl">
+          <div className="flex items-start justify-between gap-3 border-b px-4 py-4 sm:px-6">
+            <div className="min-w-0">
+              <h2 className="truncate text-lg font-semibold sm:text-xl">
+                {mode === "edit" ? "Editar venta" : "Nueva venta"}
+              </h2>
+              <p className="text-xs text-zinc-500 sm:text-sm">
+                Selecciona producto y la variante disponible por color y talla
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border px-3 py-2 hover:bg-zinc-50"
+            >
+              <X size={18} />
+            </button>
           </div>
 
-          <div className="flex gap-2">
+          {error ? (
+            <div className="mx-4 mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 sm:mx-6">
+              {error}
+            </div>
+          ) : null}
+
+          <div className="flex-1 overflow-auto px-4 py-5 sm:px-6">
+            <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
+              <div className="space-y-4">
+                <section className="rounded-2xl border p-4">
+                  <h3 className="text-sm font-semibold">Cliente y envío</h3>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-medium text-zinc-700">Cliente</span>
+                      <input
+                        value={form.cliente}
+                        onChange={(e) => setField("cliente", e.target.value)}
+                        className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-medium text-zinc-700">Correo</span>
+                      <input
+                        value={form.cliente_email}
+                        onChange={(e) => setField("cliente_email", e.target.value)}
+                        className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-medium text-zinc-700">Teléfono</span>
+                      <input
+                        value={form.cliente_telefono}
+                        onChange={(e) => setField("cliente_telefono", e.target.value)}
+                        className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-medium text-zinc-700">Fecha de venta</span>
+                      <input
+                        type="date"
+                        value={form.fecha_venta}
+                        onChange={(e) => setField("fecha_venta", e.target.value)}
+                        className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                      />
+                    </label>
+
+                    <label className="block sm:col-span-2">
+                      <span className="text-xs font-medium text-zinc-700">Dirección</span>
+                      <input
+                        value={form.direccion_linea1}
+                        onChange={(e) => setField("direccion_linea1", e.target.value)}
+                        className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                      />
+                    </label>
+
+                    <label className="block sm:col-span-2">
+                      <span className="text-xs font-medium text-zinc-700">Dirección 2</span>
+                      <input
+                        value={form.direccion_linea2}
+                        onChange={(e) => setField("direccion_linea2", e.target.value)}
+                        className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-medium text-zinc-700">Ciudad</span>
+                      <input
+                        value={form.ciudad}
+                        onChange={(e) => setField("ciudad", e.target.value)}
+                        className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-medium text-zinc-700">Estado</span>
+                      <input
+                        value={form.estado_direccion}
+                        onChange={(e) => setField("estado_direccion", e.target.value)}
+                        className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-medium text-zinc-700">Código postal</span>
+                      <input
+                        value={form.codigo_postal}
+                        onChange={(e) => setField("codigo_postal", e.target.value)}
+                        className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-medium text-zinc-700">Método de pago</span>
+                      <select
+                        value={form.metodo_pago}
+                        onChange={(e) => setField("metodo_pago", e.target.value)}
+                        className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="MERCADO_PAGO">Mercado Pago</option>
+                        <option value="EFECTIVO">Efectivo</option>
+                        <option value="TRANSFERENCIA">Transferencia</option>
+                        <option value="TARJETA">Tarjeta</option>
+                      </select>
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-medium text-zinc-700">Estado</span>
+                      <select
+                        value={form.estado}
+                        onChange={(e) => setField("estado", e.target.value)}
+                        className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="PENDIENTE">Pendiente</option>
+                        <option value="PAGADA">Pagada</option>
+                        <option value="CANCELADA">Cancelada</option>
+                        <option value="REEMBOLSADA">Reembolsada</option>
+                      </select>
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-medium text-zinc-700">Estado envío</span>
+                      <select
+                        value={form.estado_envio}
+                        onChange={(e) => setField("estado_envio", e.target.value)}
+                        className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="PENDIENTE">Pendiente de envío</option>
+                        <option value="EN_PROCESO">En proceso de envío</option>
+                        <option value="ENVIADO">Enviado</option>
+                      </select>
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-medium text-zinc-700">Tipo de envío</span>
+                      <select
+                        value={form.tipo_envio}
+                        onChange={(e) => setField("tipo_envio", e.target.value)}
+                        className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                      >
+                        <option value="ESTANDAR">Envío estándar nacional</option>
+                        <option value="EXPRESS">Envío nacional express</option>
+                        <option value="SIGUIENTE">Envío día siguiente nacional</option>
+                      </select>
+                    </label>
+
+                    <label className="block">
+                      <span className="text-xs font-medium text-zinc-700">Costo de envío</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={form.costo_envio}
+                        onChange={(e) => setField("costo_envio", e.target.value)}
+                        className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                      />
+                    </label>
+
+                    <label className="block sm:col-span-2">
+                      <span className="text-xs font-medium text-zinc-700">Referencias envío</span>
+                      <textarea
+                        rows={3}
+                        value={form.referencias_envio}
+                        onChange={(e) => setField("referencias_envio", e.target.value)}
+                        className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                      />
+                    </label>
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Productos</h3>
+                      <p className="text-xs text-zinc-500">
+                        Las tallas y colores cambian según el producto elegido
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={addDetalle}
+                      className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
+                    >
+                      <Plus size={16} />
+                      Agregar
+                    </button>
+                  </div>
+
+                  <div className="mt-4 space-y-4">
+                    {form.detalles.map((detalle) => {
+                      const producto = getProducto(detalle.producto_id);
+                      const colores = getColoresDisponibles(detalle.producto_id);
+                      const tallas = getTallasDisponibles(detalle.producto_id, detalle.color);
+                      const stockActual = getStockVariante(
+                        detalle.producto_id,
+                        detalle.color,
+                        detalle.talla
+                      );
+                      const subtotalLinea =
+                        Number(producto?.precio || 0) * Number(detalle.cantidad || 0);
+
+                      return (
+                        <div key={detalle.id} className="rounded-2xl border p-4">
+                          <div className="grid gap-3 md:grid-cols-[1.4fr_0.7fr_0.7fr_0.6fr_0.5fr_auto]">
+                            <label className="block">
+                              <span className="text-xs font-medium text-zinc-700">Producto</span>
+                              <select
+                                value={detalle.producto_id}
+                                onChange={(e) => handleProductoChange(detalle.id, e.target.value)}
+                                className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                              >
+                                {productosNormalizados.map((item) => (
+                                  <option key={item.id} value={item.id}>
+                                    {item.titulo} · {money(item.precio)}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-500">
+                                <span className="inline-flex rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700">
+                                  Precio {money(producto?.precio || 0)}
+                                </span>
+                              </div>
+                            </label>
+
+                            <label className="block">
+                              <span className="text-xs font-medium text-zinc-700">Color</span>
+                              <select
+                                value={detalle.color}
+                                onChange={(e) =>
+                                  handleColorChange(
+                                    detalle.id,
+                                    detalle.producto_id,
+                                    e.target.value
+                                  )
+                                }
+                                className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                              >
+                                {colores.length === 0 ? (
+                                  <option value="">Sin variantes</option>
+                                ) : (
+                                  colores.map((item) => (
+                                    <option key={item} value={item}>
+                                      {item}
+                                    </option>
+                                  ))
+                                )}
+                              </select>
+                            </label>
+
+                            <label className="block">
+                              <span className="text-xs font-medium text-zinc-700">Talla</span>
+                              <select
+                                value={detalle.talla}
+                                onChange={(e) => handleTallaChange(detalle.id, e.target.value)}
+                                className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm"
+                              >
+                                {tallas.length === 0 ? (
+                                  <option value="">Sin tallas</option>
+                                ) : (
+                                  tallas.map((item) => (
+                                    <option key={item} value={item}>
+                                      {item}
+                                    </option>
+                                  ))
+                                )}
+                              </select>
+
+                              <div className="mt-2 text-xs text-zinc-500">
+                                Stock variante: {stockActual}
+                              </div>
+                            </label>
+
+                            <label className="block">
+                              <span className="text-xs font-medium text-zinc-700">Cantidad</span>
+                              <input
+                                type="number"
+                                min="1"
+                                value={detalle.cantidad}
+                                onChange={(e) =>
+                                  handleCantidadChange(detalle.id, e.target.value)
+                                }
+                                className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
+                              />
+                            </label>
+
+                            <div className="flex flex-col justify-end">
+                              <div className="text-xs text-zinc-500">Subtotal</div>
+                              <div className="text-2xl font-semibold">
+                                {money(subtotalLinea)}
+                              </div>
+                            </div>
+
+                            <div className="flex items-end">
+                              <button
+                                type="button"
+                                onClick={() => removeDetalle(detalle.id)}
+                                className="rounded-xl border px-3 py-3 text-zinc-600 hover:bg-zinc-50"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              </div>
+
+              <aside className="h-fit rounded-2xl border p-4">
+                <div className="text-sm font-semibold">Resumen</div>
+                <div className="mt-3 space-y-3 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-500">Productos</span>
+                    <span className="font-semibold">{form.detalles.length}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-500">Subtotal</span>
+                    <span className="font-semibold">{money(subtotal)}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-500">Envío</span>
+                    <span className="font-semibold">{money(form.costo_envio)}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t pt-3 text-base">
+                    <span className="font-medium">Total</span>
+                    <span className="font-bold">{money(total)}</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-2xl bg-zinc-50 p-4 text-xs text-zinc-600">
+                  Si la venta queda en <b>PAGADA</b>, el backend validará stock real de
+                  cada variante.
+                </div>
+              </aside>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 border-t px-4 py-3 sm:flex-row sm:justify-end sm:px-6">
             <button
+              type="button"
               onClick={onClose}
-              className="rounded-xl border px-4 py-2 text-sm hover:bg-white active:scale-[0.98] transition"
+              className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
             >
               Cancelar
             </button>
 
             <button
-              onClick={handleSave}
-              disabled={!canSave}
-              className={[
-                "rounded-xl px-4 py-2 text-sm transition",
-                canSave
-                  ? "bg-zinc-900 text-white hover:opacity-95 active:scale-[0.98]"
-                  : "bg-zinc-300 text-zinc-600 cursor-not-allowed",
-              ].join(" ")}
+              type="button"
+              onClick={handleSubmit}
+              disabled={saving}
+              className="rounded-xl bg-zinc-900 px-4 py-2 text-sm text-white hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isEdit ? "Guardar cambios" : "Guardar venta"}
+              {saving ? "Guardando..." : mode === "edit" ? "Guardar cambios" : "Guardar venta"}
             </button>
           </div>
         </div>
-      }
-    >
-      {!hayProductos && (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          No hay productos cargados todavía. Primero asegúrate de que el endpoint de productos
-          esté devolviendo una lista válida.
-        </div>
-      )}
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700">Cliente</span>
-          <input
-            value={cliente}
-            onChange={(e) => setCliente(e.target.value)}
-            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-            placeholder="Ej: Ana García"
-          />
-        </label>
-
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700">Correo</span>
-          <input
-            value={clienteEmail}
-            onChange={(e) => setClienteEmail(e.target.value)}
-            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-            placeholder="cliente@correo.com"
-          />
-        </label>
-
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700">Teléfono</span>
-          <input
-            value={clienteTelefono}
-            onChange={(e) => setClienteTelefono(e.target.value)}
-            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-            placeholder="271..."
-          />
-        </label>
-
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700">Fecha</span>
-          <input
-            type="date"
-            value={fecha}
-            onChange={(e) => setFecha(e.target.value)}
-            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-          />
-        </label>
-
-        <label className="block md:col-span-2">
-          <span className="text-xs font-medium text-zinc-700">Dirección</span>
-          <input
-            value={direccionLinea1}
-            onChange={(e) => setDireccionLinea1(e.target.value)}
-            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-            placeholder="Calle y número"
-          />
-        </label>
-
-        <label className="block md:col-span-2">
-          <span className="text-xs font-medium text-zinc-700">Complemento dirección</span>
-          <input
-            value={direccionLinea2}
-            onChange={(e) => setDireccionLinea2(e.target.value)}
-            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-            placeholder="Interior, colonia, complemento"
-          />
-        </label>
-
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700">Ciudad</span>
-          <input
-            value={ciudad}
-            onChange={(e) => setCiudad(e.target.value)}
-            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-          />
-        </label>
-
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700">Estado dirección</span>
-          <input
-            value={estadoDireccion}
-            onChange={(e) => setEstadoDireccion(e.target.value)}
-            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-          />
-        </label>
-
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700">Código postal</span>
-          <input
-            value={codigoPostal}
-            onChange={(e) => setCodigoPostal(e.target.value)}
-            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-          />
-        </label>
-
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700">Método de pago</span>
-          <select
-            value={metodoPago}
-            onChange={(e) => setMetodoPago(e.target.value)}
-            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-          >
-            <option value="MERCADO_PAGO">Mercado Pago</option>
-            <option value="EFECTIVO">Efectivo</option>
-            <option value="TRANSFERENCIA">Transferencia</option>
-            <option value="TARJETA">Tarjeta</option>
-          </select>
-        </label>
-
-        <label className="block md:col-span-2">
-          <span className="text-xs font-medium text-zinc-700">Referencias envío</span>
-          <textarea
-            value={referenciasEnvio}
-            onChange={(e) => setReferenciasEnvio(e.target.value)}
-            rows={3}
-            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-          />
-        </label>
-
-        <label className="block">
-          <span className="text-xs font-medium text-zinc-700">Estado</span>
-          <select
-            value={estado}
-            onChange={(e) => setEstado(e.target.value)}
-            className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-          >
-            <option value="PENDIENTE">Pendiente</option>
-            <option value="PAGADA">Pagada</option>
-            <option value="CANCELADA">Cancelada</option>
-            <option value="REEMBOLSADA">Reembolsada</option>
-          </select>
-
-          {!mustValidateStock && (
-            <div className="mt-2 text-[11px] text-zinc-500">
-              Este estado no descuenta inventario.
-            </div>
-          )}
-        </label>
       </div>
-
-      <div className="mt-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold">Productos</div>
-            <div className="text-xs text-zinc-500">
-              {mustValidateStock
-                ? "Valida stock disponible por variante"
-                : "No descuenta stock todavía"}
-            </div>
-          </div>
-
-          <button
-            onClick={addItem}
-            type="button"
-            disabled={!hayProductos}
-            className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm hover:bg-zinc-50 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Plus size={16} />
-            Agregar
-          </button>
-        </div>
-
-        {stockIssues.length > 0 && (
-          <div className="mt-3">
-            {stockIssues.map((m, i) => (
-              <StockAlert key={i} msg={m} />
-            ))}
-          </div>
-        )}
-
-        <div className="mt-3 space-y-3">
-          {items.map((it, idx) => {
-            const p = productMap.get(String(it.productId));
-            const price = Number(p?.precio || 0);
-            const subtotal = price * (Number(it.qty) || 0);
-
-            const colores = getColoresProducto(it.productId);
-            const tallas = getTallasProducto(it.productId, it.color);
-            const stockVariante = getStockVariante(it.productId, it.color, it.talla);
-
-            return (
-              <div key={idx} className="rounded-2xl border p-3">
-                <div className="grid gap-3 md:grid-cols-12 items-end">
-                  <label className="block md:col-span-4">
-                    <span className="text-xs font-medium text-zinc-700">Producto</span>
-                    <select
-                      value={it.productId}
-                      onChange={(e) => handleProductChange(idx, e.target.value)}
-                      className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-                    >
-                      {hayProductos ? (
-                        listaProductos.map((producto) => (
-                          <option key={producto.id} value={String(producto.id)}>
-                            {producto.titulo} · {money(producto.precio)}
-                          </option>
-                        ))
-                      ) : (
-                        <option value="">Sin productos disponibles</option>
-                      )}
-                    </select>
-                  </label>
-
-                  <label className="block md:col-span-2">
-                    <span className="text-xs font-medium text-zinc-700">Color</span>
-                    <select
-                      value={it.color}
-                      onChange={(e) => handleColorChange(idx, it.productId, e.target.value)}
-                      className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-                    >
-                      {colores.length > 0 ? (
-                        colores.map((color) => (
-                          <option key={color} value={color}>
-                            {color}
-                          </option>
-                        ))
-                      ) : (
-                        <option value="">Sin variantes</option>
-                      )}
-                    </select>
-                  </label>
-
-                  <label className="block md:col-span-2">
-                    <span className="text-xs font-medium text-zinc-700">Talla</span>
-                    <select
-                      value={it.talla}
-                      onChange={(e) => updateItem(idx, { talla: e.target.value })}
-                      className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-                    >
-                      {tallas.length > 0 ? (
-                        tallas.map((talla) => (
-                          <option key={talla} value={talla}>
-                            {talla}
-                          </option>
-                        ))
-                      ) : (
-                        <option value="">Sin tallas</option>
-                      )}
-                    </select>
-                  </label>
-
-                  <label className="block md:col-span-2">
-                    <span className="text-xs font-medium text-zinc-700">Cantidad</span>
-                    <input
-                      type="number"
-                      min={1}
-                      value={it.qty}
-                      onChange={(e) => updateItem(idx, { qty: Number(e.target.value) })}
-                      className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-                    />
-                    <div className="mt-2 text-[11px] text-zinc-500">
-                      Stock variante: <span className="font-medium">{stockVariante}</span>
-                    </div>
-                  </label>
-
-                  <div className="md:col-span-1">
-                    <div className="text-xs text-zinc-500">Subtotal</div>
-                    <div className="mt-2 font-semibold">{money(subtotal)}</div>
-                  </div>
-
-                  <div className="md:col-span-1 flex justify-end">
-                    <button
-                      onClick={() => removeItem(idx)}
-                      type="button"
-                      className="rounded-xl border p-2 hover:bg-zinc-50 active:scale-[0.98] transition"
-                      title="Eliminar"
-                      disabled={items.length === 1}
-                    >
-                      <Trash2 size={16} className="text-zinc-700" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-3 flex items-center gap-2 text-xs text-zinc-500 flex-wrap">
-                  <Badge variant="success">Precio</Badge>
-                  <span>{money(price)}</span>
-                  {it.color ? <span>· {it.color}</span> : null}
-                  {it.talla ? <span>· Talla {it.talla}</span> : null}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </Modal>
+    </div>
   );
 }

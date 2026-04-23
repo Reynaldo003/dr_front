@@ -1,4 +1,3 @@
-// dr_front/src/public-site/pages/shop/RebajasPage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { obtenerRebajas } from "../../lib/productosPublicApi";
 import { useCart } from "../../context/cart";
@@ -31,7 +30,9 @@ export default function RebajasPage() {
         const cargar = async () => {
             try {
                 setCargando(true);
-                const data = await obtenerRebajas();
+                setError("");
+
+                const data = await obtenerRebajas({}, { cache: false });
                 setProductos(data || []);
             } catch (err) {
                 console.error(err);

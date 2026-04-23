@@ -6,11 +6,15 @@ import shortsImg from "../assets/categories/shorts.jpg";
 import blusasImg from "../assets/categories/blusas.jpg";
 import sacosImg from "../assets/categories/sacos.jpg";
 import pantalonesImg from "../assets/categories/pantalones.jpg";
+import blazersImg from "../assets/categories/Blazers.jpeg";
+import palazzosImg from "../assets/categories/Palazzo.jpeg";
+import topsImg from "../assets/categories/Tops.jpeg";
+import chalecosImg from "../assets/categories/chalecos.jpeg";
 
 export const categories = [
   {
     id: 1,
-    slug: "conjuntos",
+    slug: "sets",
     name: "Sets",
     image: conjuntosImg,
     href: "/catalogo/conjuntos",
@@ -63,5 +67,33 @@ export const categories = [
     name: "Pantalones",
     image: pantalonesImg,
     href: "/catalogo/pantalones",
+  },
+  {
+    id: 9,
+    slug: "blazers",
+    name: "Blazers",
+    image: blazersImg,
+    href: "/catalogo/blazers",
+  },
+  {
+    id: 10,
+    slug: "palazzos",
+    name: "Palazzos",
+    image: palazzosImg,
+    href: "/catalogo/palazzos",
+  },
+  {
+    id: 11,
+    slug: "chalecos",
+    name: "Chalecos",
+    image: chalecosImg,
+    href: "/catalogo/chalecos",
+  },
+  {
+    id: 12,
+    slug: "tops",
+    name: "Tops",
+    image: topsImg,
+    href: "/catalogo/tops",
   },
 ];

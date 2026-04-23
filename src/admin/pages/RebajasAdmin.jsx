@@ -1,4 +1,3 @@
-// dr_front/src/admin/pages/RebajasAdmin.jsx
 import { useEffect, useMemo, useState } from "react";
 import {
     actualizarProducto,
@@ -20,6 +19,12 @@ function calcularPorcentaje(precioNormal, precioRebaja) {
     return Math.round(((normal - rebaja) / normal) * 100);
 }
 
+function normalizarListadoRespuesta(data) {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.results)) return data.results;
+    return [];
+}
+
 export default function RebajasAdmin() {
     const [productos, setProductos] = useState([]);
     const [busqueda, setBusqueda] = useState("");
@@ -32,8 +37,17 @@ export default function RebajasAdmin() {
     const cargarProductos = async (texto = "") => {
         try {
             setCargando(true);
-            const data = await obtenerProductos({ buscar: texto });
-            const normales = (data || []).filter((item) => !item.es_new_arrival);
+            setMensaje("");
+
+            const data = await obtenerProductos({
+                buscar: texto,
+                page: 1,
+                page_size: 200,
+            });
+
+            const normales = normalizarListadoRespuesta(data).filter(
+                (item) => !item.es_new_arrival
+            );
 
             setProductos(normales);
 
@@ -125,8 +139,8 @@ export default function RebajasAdmin() {
             <div className="rounded-3xl border bg-white p-6 shadow-sm">
                 <h1 className="text-2xl font-bold text-zinc-900">Administrador de Rebajas</h1>
                 <p className="mt-2 text-sm text-zinc-500">
-                    Selecciona un producto existente, asigna un nuevo precio y se publicará
-                    automáticamente en el apartado de rebajas de la tienda.
+                    Selecciona un producto del catálogo, asigna el nuevo precio y quedará
+                    disponible en la sección de rebajas.
                 </p>
             </div>
 

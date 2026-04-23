@@ -38,10 +38,14 @@ const PRODUCT_CATEGORIES = [
   "Blusas",
   "Pantalones",
   "Shorts",
-  "Chamarras",
+  "Sueteres y Chamarras",
   "Faldas",
   "Sacos",
   "Accesorios",
+  "Blazers",
+  "Palazzos",
+  "Chalecos",
+  "Tops"
 ];
 
 const DEFAULT_SIZES = [

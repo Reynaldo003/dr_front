@@ -24,6 +24,12 @@ function normalizeText(value) {
     .trim();
 }
 
+function slugFromText(value) {
+  return normalizeText(value)
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-");
+}
+
 function buildSearchText(item) {
   return normalizeText(
     [item?.name, item?.slug, item?.href].filter(Boolean).join(" "),
@@ -171,32 +177,21 @@ function SearchModal({ open, onClose, items = [] }) {
                         key={item.id}
                         type="button"
                         onClick={() => handlePickCategory(item)}
-                        className="flex w-full items-center gap-4 rounded-3xl border border-black/10 bg-white p-3 text-left transition hover:bg-gray-50"
+                        className="flex w-full items-center justify-between gap-4 rounded-2xl border border-black/10 bg-white px-4 py-4 text-left transition hover:bg-gray-50"
                       >
-                        <div className="h-20 w-16 shrink-0 overflow-hidden rounded-2xl bg-gray-100 sm:h-24 sm:w-20">
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        </div>
-
                         <div className="min-w-0 flex-1">
                           <h4 className="truncate text-base font-bold text-black">
                             {item.name}
                           </h4>
 
-                          <p className="mt-1 truncate text-sm text-black/55">
+                          <p className="mt-1 text-sm text-black/55">
                             Categoría
                           </p>
                         </div>
 
-                        <div className="hidden sm:flex">
-                          <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 bg-white text-black">
-                            <ArrowUpRight className="h-4 w-4" strokeWidth={2} />
-                          </span>
-                        </div>
+                        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-black">
+                          <ArrowUpRight className="h-4 w-4" strokeWidth={2} />
+                        </span>
                       </button>
                     ))
                   ) : (
@@ -220,40 +215,50 @@ function SearchModal({ open, onClose, items = [] }) {
   );
 }
 
-function CategoryMenuCard({ item, onClick, mobile = false }) {
+function CategoryMenuCard({ item, onClick }) {
   return (
     <Link
       to={item.to}
       onClick={onClick}
-      className={[
-        "group relative block overflow-hidden rounded-2xl border border-black/10 bg-[#f3f3f3] transition",
-        "hover:bg-[#eeeeee]",
-        mobile ? "min-h-[88px]" : "min-h-[96px]",
-      ].join(" ")}
+      className="group relative block min-h-[76px] overflow-hidden rounded-2xl border border-black/10 bg-[#f3f3f3] transition hover:bg-[#eeeeee] xl:min-h-[82px]"
     >
-      <div className="absolute inset-0 bg-gradient-to-r from-[#f3f3f3] via-[#f3f3f3] via-60% to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-r from-[#f3f3f3] via-[#f3f3f3] via-55% to-transparent" />
 
-      <div
-        className={[
-          "relative z-10 flex h-full items-center",
-          mobile ? "px-4 py-4" : "px-4 py-4",
-        ].join(" ")}
-      >
-        <span className="max-w-[62%] text-sm font-extrabold uppercase tracking-tight text-black sm:text-base">
+      <div className="relative z-10 flex h-full items-center px-4 py-4">
+        <span className="max-w-[58%] text-[13px] font-extrabold uppercase tracking-tight text-black sm:text-sm xl:text-[15px]">
           {item.label}
         </span>
       </div>
 
-      <div className="pointer-events-none absolute inset-y-0 right-0 flex w-[110px] items-end justify-end sm:w-[125px]">
-        <img
-          src={item.image}
-          alt={item.label}
-          className="h-full w-full object-contain object-right-bottom transition duration-300 group-hover:scale-[1.03]"
-          loading="lazy"
-          decoding="async"
-          draggable="false"
-        />
-      </div>
+      {item.image ? (
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex w-[84px] items-end justify-end xl:w-[96px]">
+          <img
+            src={item.image}
+            alt={item.label}
+            className="h-full w-full object-contain object-right-bottom transition duration-300 group-hover:scale-[1.04]"
+            loading="lazy"
+            decoding="async"
+            draggable="false"
+          />
+        </div>
+      ) : null}
+    </Link>
+  );
+}
+
+function CategoryMobileLink({ item, onClick }) {
+  return (
+    <Link
+      to={item.to}
+      onClick={onClick}
+      className="group flex items-center justify-between rounded-2xl border border-black/10 bg-white px-4 py-3.5 text-sm text-black transition hover:bg-gray-50"
+    >
+      <span className="font-semibold tracking-tight">{item.label}</span>
+
+      <ArrowUpRight
+        className="h-4 w-4 text-black/45 transition group-hover:text-black"
+        strokeWidth={2}
+      />
     </Link>
   );
 }
@@ -266,19 +271,42 @@ export default function Header({ onCartClick }) {
     { label: "REBAJAS", to: "/rebajas" },
   ];
 
-  const catalogItems = useMemo(
-    () =>
-      (Array.isArray(categories) ? categories : []).map((item) => ({
-        id: item.id,
-        label: item.name,
-        to: item.href,
-        image: item.image,
-        name: item.name,
-        slug: item.slug,
-        href: item.href,
-      })),
-    [],
-  );
+  const catalogItems = useMemo(() => {
+    if (!Array.isArray(categories)) return [];
+
+    return categories
+      .map((item, index) => {
+        if (typeof item === "string") {
+          const slug = slugFromText(item);
+          const href = `/catalogo/${slug}`;
+
+          return {
+            id: `cat-${index + 1}`,
+            label: item,
+            to: href,
+            name: item,
+            slug,
+            href,
+            image: null,
+          };
+        }
+
+        const name = item?.name || item?.slug || `Categoría ${index + 1}`;
+        const slug = item?.slug || slugFromText(name);
+        const href = item?.href || `/catalogo/${slug}`;
+
+        return {
+          id: item?.id ?? `cat-${index + 1}`,
+          label: name,
+          to: href,
+          name,
+          slug,
+          href,
+          image: item?.image || null,
+        };
+      })
+      .filter(Boolean);
+  }, []);
 
   const { count } = useCart();
   const { clienteUser, logoutCliente } = useAuth();
@@ -392,8 +420,8 @@ export default function Header({ onCartClick }) {
 
   return (
     <>
-      <header className="sticky top-0 z-50 overflow-x-clip border-b border-white/10 bg-black">
-        <div className="mx-auto max-w-[1300px] overflow-x-clip px-3 sm:px-4">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-black">
+        <div className="mx-auto max-w-[1300px] px-3 sm:px-4">
           <div className="lg:hidden">
             <div className="grid h-16 grid-cols-[88px,1fr,88px] items-center gap-2 sm:h-[72px]">
               <div className="flex items-center gap-2 justify-self-start">
@@ -427,7 +455,7 @@ export default function Header({ onCartClick }) {
                 <img
                   src={logo}
                   alt="Logo Boutique"
-                  className="h-20 w-auto max-w-[117px] object-contain sm:h-15 sm:max-w-[210px] [filter:brightness(0)_invert(1)]"
+                  className="h-12 w-auto max-w-[170px] object-contain [filter:brightness(0)_invert(1)] sm:h-14 sm:max-w-[210px]"
                   draggable="false"
                 />
               </Link>
@@ -540,38 +568,49 @@ export default function Header({ onCartClick }) {
 
                 {catalogOpenDesktop && (
                   <div
-                    className="absolute left-1/2 mt-4 w-[min(760px,92vw)] -translate-x-1/2 rounded-3xl border bg-white p-5 text-black shadow-2xl"
+                    className="absolute left-1/2 top-full z-[80] mt-4 w-[min(980px,94vw)] -translate-x-1/2 rounded-[32px] border border-black/10 bg-white text-black shadow-[0_24px_70px_rgba(0,0,0,0.22)]"
                     role="menu"
                   >
-                    <div className="mb-3 text-xs font-bold text-gray-500">
-                      CATEGORÍAS
-                    </div>
+                    <div className="max-h-[calc(100vh-150px)] overflow-y-auto p-4 sm:p-5 xl:p-6">
+                      <div className="mb-4 flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-xs font-bold tracking-[0.14em] text-gray-500">
+                            CATEGORÍAS
+                          </div>
+                          <p className="mt-1 text-sm text-gray-500">
+                            Explora todas las colecciones
+                          </p>
+                        </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      {catalogItems.map((c) => (
-                        <CategoryMenuCard
-                          key={c.id}
-                          item={c}
+                        <button
+                          type="button"
                           onClick={() => setCatalogOpenDesktop(false)}
-                        />
-                      ))}
-                    </div>
+                          className="shrink-0 rounded-full border border-black/10 px-4 py-2 text-sm font-medium transition hover:bg-gray-50"
+                        >
+                          Cerrar
+                        </button>
+                      </div>
 
-                    <div className="mt-4 flex justify-end">
-                      <button
-                        type="button"
-                        onClick={() => setCatalogOpenDesktop(false)}
-                        className="text-sm underline hover:opacity-70"
-                      >
-                        Cerrar
-                      </button>
+                      <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
+                        {catalogItems.map((c) => (
+                          <CategoryMenuCard
+                            key={c.id}
+                            item={c}
+                            onClick={() => setCatalogOpenDesktop(false)}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
 
               {topLinks.map((t) => (
-                <Link key={t.label} to={t.to} className="text-white hover:opacity-70">
+                <Link
+                  key={t.label}
+                  to={t.to}
+                  className="text-white hover:opacity-70"
+                >
                   {t.label}
                 </Link>
               ))}
@@ -719,11 +758,10 @@ export default function Header({ onCartClick }) {
 
                 {catalogOpenMobile && (
                   <ul className="mt-3 space-y-2">
-                    {catalogItems.map((l) => (
-                      <li key={l.id}>
-                        <CategoryMenuCard
-                          item={l}
-                          mobile
+                    {catalogItems.map((item) => (
+                      <li key={item.id}>
+                        <CategoryMobileLink
+                          item={item}
                           onClick={() => {
                             setCatalogOpenMobile(false);
                             setMenuOpen(false);

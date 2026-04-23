@@ -1,4 +1,3 @@
-// dr_front/src/public-site/pages/shop/NewArrivalsPage.jsx
 import { useEffect, useState } from "react";
 import { obtenerNewArrivals } from "../../lib/productosPublicApi";
 
@@ -26,7 +25,9 @@ export default function NewArrivalsPage() {
         const cargar = async () => {
             try {
                 setCargando(true);
-                const data = await obtenerNewArrivals();
+                setError("");
+
+                const data = await obtenerNewArrivals({}, { cache: false });
                 setProductos(data || []);
             } catch (err) {
                 console.error(err);
