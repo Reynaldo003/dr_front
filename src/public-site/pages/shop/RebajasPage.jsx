@@ -31,8 +31,7 @@ export default function RebajasPage() {
             try {
                 setCargando(true);
                 setError("");
-
-                const data = await obtenerRebajas({}, { cache: false });
+                const data = await obtenerRebajas();
                 setProductos(data || []);
             } catch (err) {
                 console.error(err);

@@ -26,8 +26,7 @@ export default function NewArrivalsPage() {
             try {
                 setCargando(true);
                 setError("");
-
-                const data = await obtenerNewArrivals({}, { cache: false });
+                const data = await obtenerNewArrivals();
                 setProductos(data || []);
             } catch (err) {
                 console.error(err);

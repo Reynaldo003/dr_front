@@ -1,4 +1,3 @@
-//public-site/lib/productosPublicApi.js
 const API_BASE_URL = "https://misdosreynas.com";
 const GET_CACHE_TTL = 5 * 60 * 1000;
 const CACHE_PREFIX = "public_shop_lists_cache_v2::";
@@ -71,12 +70,29 @@ async function parseResponse(response) {
 async function request(path, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
   const url = `${API_BASE_URL}${path}`;
-  const useCache = method === "GET" && options.cache !== false;
+
+  const {
+    cache: cacheOption,
+    signal,
+    headers: extraHeaders,
+    ...restOptions
+  } = options;
+
+  const disableAppCache = cacheOption === false;
+  const fetchCacheMode =
+    typeof cacheOption === "string" ? cacheOption : undefined;
+
+  const useCache =
+    method === "GET" &&
+    !disableAppCache &&
+    fetchCacheMode !== "no-store" &&
+    fetchCacheMode !== "reload";
+
   const cacheKey = useCache ? buildCacheKey(url) : "";
 
   const headers = {
     Accept: "application/json",
-    ...(options.headers || {}),
+    ...(extraHeaders || {}),
   };
 
   if (useCache) {
@@ -88,13 +104,18 @@ async function request(path, options = {}) {
   }
 
   const fetchPromise = (async () => {
-    const response = await fetch(url, {
-      ...options,
+    const fetchConfig = {
+      ...restOptions,
       method,
       headers,
-      signal: options.signal,
-    });
+      signal,
+    };
 
+    if (fetchCacheMode) {
+      fetchConfig.cache = fetchCacheMode;
+    }
+
+    const response = await fetch(url, fetchConfig);
     const data = await parseResponse(response);
 
     if (!response.ok) {

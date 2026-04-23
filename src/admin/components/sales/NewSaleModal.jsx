@@ -132,8 +132,6 @@ export default function NewSaleModal({
     setError("");
   }, [open, initialSale, productosNormalizados]);
 
-  if (!open) return null;
-
   function setField(name, value) {
     setForm((prev) => ({ ...prev, [name]: value }));
   }
@@ -324,6 +322,8 @@ export default function NewSaleModal({
 
     setSaving(false);
   }
+
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50">
