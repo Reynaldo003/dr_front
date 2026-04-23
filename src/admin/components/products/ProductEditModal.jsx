@@ -304,11 +304,6 @@ export default function ProductEditModal({
       return;
     }
 
-    if (totalStock <= 0) {
-      setError("El stock total debe ser mayor a 0.");
-      return;
-    }
-
     if (salePrice !== "" && Number(salePrice) >= Number(price)) {
       setError("El precio de rebaja debe ser menor al precio normal.");
       return;
@@ -812,7 +807,7 @@ export default function ProductEditModal({
             <button
               type="button"
               onClick={handleSave}
-              disabled={loading || !title.trim() || totalStock === 0 || saving}
+              disabled={loading || !title.trim() || saving}
               className={[
                 "rounded-xl px-4 py-2 text-sm",
                 !loading && title.trim() && totalStock > 0 && !saving

@@ -3,20 +3,26 @@ export default function Card({ title, subtitle, right, children, className = "" 
     <section
       className={[
         "rounded-2xl border bg-white shadow-sm",
-        "p-4 sm:p-5",
+        "p-3 sm:p-5",
         className,
       ].join(" ")}
     >
       {(title || subtitle || right) && (
-        <header className="flex items-start justify-between gap-3 mb-4">
+        <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            {title && <h3 className="text-sm font-semibold truncate">{title}</h3>}
-            {subtitle && <p className="text-xs text-zinc-500">{subtitle}</p>}
+            {title && <h3 className="text-sm sm:text-base font-semibold break-words">{title}</h3>}
+            {subtitle && <p className="mt-1 text-xs sm:text-sm text-zinc-500 break-words">{subtitle}</p>}
           </div>
-          {right}
+
+          {right ? (
+            <div className="w-full sm:w-auto shrink-0">
+              {right}
+            </div>
+          ) : null}
         </header>
       )}
-      {children}
+
+      <div className="min-w-0">{children}</div>
     </section>
   );
 }

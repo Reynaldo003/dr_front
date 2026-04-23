@@ -31,42 +31,43 @@ export default function Modal({
 
   return (
     <div className="fixed inset-0 z-50">
-      {/* overlay */}
       <div
         className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-fadeIn"
         onClick={onClose}
       />
 
-      {/* panel */}
-      <div className="absolute inset-0 grid place-items-center p-4">
+      <div className="absolute inset-0 flex items-end justify-center sm:grid sm:place-items-center sm:p-4">
         <div
           className="
-            w-full max-w-5xl
-            max-h-[calc(100vh-2rem)]
-            rounded-2xl border bg-white shadow-xl animate-fadeUp
-            flex flex-col overflow-hidden
+            flex h-[100dvh] w-full flex-col overflow-hidden border bg-white shadow-xl animate-fadeUp
+            rounded-none
+            sm:h-auto sm:max-h-[calc(100vh-2rem)] sm:max-w-5xl sm:rounded-2xl
           "
         >
-          <div className="flex items-start justify-between gap-3 p-5 border-b shrink-0">
-            <div>
-              <div className="text-lg font-semibold">{title}</div>
-              {subtitle && <div className="text-sm text-zinc-500">{subtitle}</div>}
+          <div className="flex items-start justify-between gap-3 border-b p-4 sm:p-5 shrink-0">
+            <div className="min-w-0">
+              <div className="text-base sm:text-lg font-semibold break-words">{title}</div>
+              {subtitle && (
+                <div className="mt-1 text-xs sm:text-sm text-zinc-500 break-words">
+                  {subtitle}
+                </div>
+              )}
             </div>
 
             <button
               onClick={onClose}
-              className="rounded-xl border p-2 hover:bg-zinc-50 active:scale-[0.98] transition"
+              className="rounded-xl border p-2 hover:bg-zinc-50 active:scale-[0.98] transition shrink-0"
             >
               <X size={18} />
             </button>
           </div>
 
-          <div className="p-5 overflow-y-auto flex-1 min-h-0">
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-5">
             {children}
           </div>
 
           {footer && (
-            <div className="p-5 border-t bg-zinc-50 rounded-b-2xl shrink-0">
+            <div className="shrink-0 border-t bg-zinc-50 p-4 sm:p-5">
               {footer}
             </div>
           )}
