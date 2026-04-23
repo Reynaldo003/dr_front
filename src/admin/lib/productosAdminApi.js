@@ -1,3 +1,4 @@
+//src/admin/lib/productosAdminApi.js
 import { getAdminToken } from "../services/adminAuthApi";
 
 const API_BASE_URL = "https://misdosreynas.com/api";

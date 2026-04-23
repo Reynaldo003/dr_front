@@ -1,3 +1,4 @@
+//src/admin/services/productosApi.js
 export {
   obtenerProductos,
   obtenerProducto,

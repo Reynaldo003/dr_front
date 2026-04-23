@@ -1,3 +1,4 @@
+//src/admin/pages/Productos.jsx
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronLeft,

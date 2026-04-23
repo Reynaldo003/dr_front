@@ -17,6 +17,8 @@ const PRICE_FORMATTER = new Intl.NumberFormat("es-MX", {
   currency: "MXN",
 });
 
+const ORDEN_TALLAS = ["XS", "S", "SM", "M", "ML", "L", "LX", "XL", "XXL", "UNITALLA"];
+
 function buildVariantKey(color = "", talla = "") {
   return `${String(color).trim()}__${String(talla).trim()}`;
 }
@@ -73,7 +75,26 @@ export default function ProductModal({
 
   const images = useMemo(() => product?.images ?? [], [product]);
   const colors = useMemo(() => product?.colors ?? [], [product]);
-  const sizes = useMemo(() => product?.sizes ?? [], [product]);
+  const sizes = useMemo(() => {
+    const tallas = product?.sizes ?? [];
+
+    return [...tallas].sort((a, b) => {
+      const tallaA = String(a).trim().toUpperCase();
+      const tallaB = String(b).trim().toUpperCase();
+
+      const indexA = ORDEN_TALLAS.indexOf(tallaA);
+      const indexB = ORDEN_TALLAS.indexOf(tallaB);
+
+      if (indexA === -1 && indexB === -1) {
+        return tallaA.localeCompare(tallaB);
+      }
+
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+
+      return indexA - indexB;
+    });
+  }, [product]);
   const variantStockMap = useMemo(() => product?.variantStockMap ?? {}, [product]);
 
   const getStock = useCallback(

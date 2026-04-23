@@ -1,5 +1,5 @@
+//src/admin/component/products/ProductViewModal.jsx
 import { Pencil, X } from "lucide-react";
-
 function SkeletonBox({ className = "" }) {
   return <div className={`animate-pulse rounded-2xl bg-zinc-100 ${className}`} />;
 }

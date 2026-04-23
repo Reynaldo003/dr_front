@@ -1,3 +1,4 @@
+//src/admin/component/products/ProductEditModal.jsx
 import { useEffect, useMemo, useState } from "react";
 import { Trash2, X } from "lucide-react";
 

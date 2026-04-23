@@ -1,4 +1,3 @@
-//pulic-site/data/categories.js
 import conjuntosImg from "../assets/categories/conjuntos.jpg";
 import vestidosImg from "../assets/categories/vestidos.jpg";
 import chamarrasImg from "../assets/categories/chamarras.jpg";

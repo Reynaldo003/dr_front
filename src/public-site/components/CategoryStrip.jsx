@@ -69,7 +69,7 @@ function buscarCategoriaLocal(itemBackend) {
 function ejecutarCuandoIdle(fn, delayFallback = 250) {
   if (typeof window === "undefined") {
     fn();
-    return () => { };
+    return () => {};
   }
 
   let cancelado = false;
@@ -209,7 +209,7 @@ export default function CategoryStrip({
 
           return {
             id: item?.id ?? item?.slug ?? item?.nombre ?? slug,
-            title: item?.nombre || categoriaLocal?.name || "Categoría",
+            title: categoriaLocal?.name || item?.nombre || "Categoría",
             to: item?.slug
               ? `/catalogo/${item.slug}`
               : categoriaLocal?.href || (slug ? `/catalogo/${slug}` : "#"),

@@ -1,7 +1,7 @@
-//src/public-site/pages/catalog/CategoriaPage.jsx
 import { useMemo } from "react";
 import { useParams } from "react-router-dom";
 import NewCollection from "../../components/NewCollection";
+import { categories } from "../../data/categories";
 
 function normalizarSlug(slug = "") {
     return decodeURIComponent(String(slug || ""))
@@ -23,11 +23,18 @@ function deslugificar(slug = "") {
 export default function CategoriaPage() {
     const { categoriaSlug = "" } = useParams();
 
-    const categoria = useMemo(() => deslugificar(categoriaSlug), [categoriaSlug]);
     const categoriaKey = useMemo(
         () => normalizarSlug(categoriaSlug),
         [categoriaSlug],
     );
+
+    const categoria = useMemo(() => {
+        const categoriaEncontrada = categories.find(
+            (item) => normalizarSlug(item.slug) === categoriaKey,
+        );
+
+        return categoriaEncontrada?.name || deslugificar(categoriaSlug);
+    }, [categoriaKey, categoriaSlug]);
 
     return (
         <main>

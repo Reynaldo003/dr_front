@@ -1,6 +1,16 @@
 //src/admin/component/products/NewProductModal.jsx
-import { X, Plus, Image as ImgIcon, Trash2, Check, Palette, Upload } from "lucide-react";
+import {
+  X,
+  Plus,
+  Image as ImgIcon,
+  Trash2,
+  Check,
+  Palette,
+  Upload,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { optimizarArchivoImagen } from "../../utils/imageOptimizer";
+
 const DEFAULT_COLORS = [
   { name: "Negro", hex: "#111827" },
   { name: "Blanco", hex: "#F9FAFB" },
@@ -21,6 +31,7 @@ const DEFAULT_COLORS = [
   { name: "Naranja", hex: "#F97316" },
   { name: "Amarillo", hex: "#FACC15" },
 ];
+
 const PRODUCT_CATEGORIES = [
   "Vestidos",
   "Sets",
@@ -33,7 +44,18 @@ const PRODUCT_CATEGORIES = [
   "Accesorios",
 ];
 
-const DEFAULT_SIZES = ["XS", "S", "SM", "M", "ML", "L", "LX", "XL", "XXL", "Unitalla"];
+const DEFAULT_SIZES = [
+  "XS",
+  "S",
+  "SM",
+  "M",
+  "ML",
+  "L",
+  "LX",
+  "XL",
+  "XXL",
+  "Unitalla",
+];
 
 function uid() {
   return Math.random().toString(16).slice(2) + Date.now().toString(16);
@@ -43,17 +65,6 @@ function clampInt(v) {
   const n = Number(v);
   if (Number.isNaN(n)) return 0;
   return Math.max(0, Math.floor(n));
-}
-
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-
-    reader.readAsDataURL(file);
-  });
 }
 
 function Swatch({ hex }) {
@@ -70,7 +81,9 @@ function StepPill({ active, done, children }) {
     <div
       className={[
         "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs",
-        active ? "bg-zinc-900 text-white border-zinc-900" : "bg-white text-zinc-700",
+        active
+          ? "border-zinc-900 bg-zinc-900 text-white"
+          : "bg-white text-zinc-700",
       ].join(" ")}
     >
       {done ? (
@@ -86,7 +99,13 @@ function StepPill({ active, done, children }) {
     </div>
   );
 }
-export default function NewProductModal({ open, onClose, onSave, saving = false }) {
+
+export default function NewProductModal({
+  open,
+  onClose,
+  onSave,
+  saving = false,
+}) {
   const [step, setStep] = useState(1);
 
   const [title, setTitle] = useState("");
@@ -100,7 +119,7 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
 
   const [colors, setColors] = useState(DEFAULT_COLORS);
   const [selectedColorIds, setSelectedColorIds] = useState(() =>
-    DEFAULT_COLORS.slice(0, 2).map((c) => c.name)
+    DEFAULT_COLORS.slice(0, 2).map((c) => c.name),
   );
   const sizes = DEFAULT_SIZES;
   const [selectedSizes, setSelectedSizes] = useState(["S", "M", "L"]);
@@ -109,10 +128,12 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
 
   const [customColorName, setCustomColorName] = useState("");
   const [customColorHex, setCustomColorHex] = useState("#111827");
+  const [processingImages, setProcessingImages] = useState(false);
 
   const totalStock = useMemo(() => {
     return Object.values(stockMap).reduce((acc, v) => acc + (v || 0), 0);
   }, [stockMap]);
+
   function resetForm() {
     setStep(1);
     setTitle("");
@@ -128,7 +149,9 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
     setStockMap({});
     setCustomColorName("");
     setCustomColorHex("#111827");
+    setProcessingImages(false);
   }
+
   const galleryPreview = useMemo(() => {
     const arr = [];
     if (heroUrl) arr.push({ id: "hero", url: heroUrl });
@@ -139,40 +162,55 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
   const canStep2 = title.trim().length >= 2 && Number(price) > 0;
   const canStep3 = heroUrl.trim().length > 5 || gallery.length > 0;
 
-  async function handleHeroFileChange(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const base64 = await fileToBase64(file);
-      setHeroUrl(base64);
-    } catch (error) {
-      console.error("Error al convertir imagen principal:", error);
-    }
-
-    e.target.value = "";
-  }
-
   useEffect(() => {
     if (open) {
       resetForm();
     }
   }, [open]);
 
+  async function handleHeroFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setProcessingImages(true);
+
+    try {
+      const optimizada = await optimizarArchivoImagen(file, {
+        maxWidth: 1600,
+        maxHeight: 1600,
+        quality: 0.82,
+      });
+
+      setHeroUrl(optimizada);
+    } catch (error) {
+      console.error("Error al optimizar la imagen principal:", error);
+    } finally {
+      setProcessingImages(false);
+      e.target.value = "";
+    }
+  }
+
   async function handleGalleryFilesChange(e) {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
+    setProcessingImages(true);
+
     try {
       const newItems = await Promise.all(
         files.map(async (file) => {
-          const base64 = await fileToBase64(file);
+          const optimizada = await optimizarArchivoImagen(file, {
+            maxWidth: 1600,
+            maxHeight: 1600,
+            quality: 0.82,
+          });
+
           return {
             id: uid(),
             name: file.name,
-            url: base64,
+            url: optimizada,
           };
-        })
+        }),
       );
 
       setGallery((prev) => [...prev, ...newItems]);
@@ -181,10 +219,11 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
         setHeroUrl(newItems[0].url);
       }
     } catch (error) {
-      console.error("Error al convertir imágenes de galería:", error);
+      console.error("Error al optimizar imágenes de galería:", error);
+    } finally {
+      setProcessingImages(false);
+      e.target.value = "";
     }
-
-    e.target.value = "";
   }
 
   function removeGallery(id) {
@@ -253,14 +292,16 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
     if (!cleanName || !cleanHex) return;
 
     setColors((prev) => {
-      const exists = prev.some((c) => c.name.toLowerCase() === cleanName.toLowerCase());
+      const exists = prev.some(
+        (c) => c.name.toLowerCase() === cleanName.toLowerCase(),
+      );
       if (exists) return prev;
       return [...prev, { name: cleanName, hex: cleanHex }];
     });
   }
 
   async function handleSave() {
-    if (saving) return;
+    if (saving || processingImages) return;
 
     const payload = {
       title,
@@ -283,7 +324,7 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
   }
 
   function resetAndClose() {
-    if (saving) return;
+    if (saving || processingImages) return;
     resetForm();
     onClose?.();
   }
@@ -293,18 +334,21 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
   return (
     <div className="fixed inset-0 z-50">
       <button
-        className="absolute inset-0 bg-black/40 animate-fadeIn"
+        className="absolute inset-0 animate-fadeIn bg-black/40"
         onClick={resetAndClose}
         aria-label="Cerrar"
       />
 
-      <div className="absolute inset-0 flex items-end sm:items-center justify-center p-0 sm:p-6">
-        <div className="w-full h-[100dvh] sm:h-auto sm:max-h-[88vh] sm:max-w-5xl bg-white sm:rounded-3xl shadow-2xl border animate-fadeUp flex flex-col overflow-hidden">
-          <div className="px-4 sm:px-6 py-4 border-b flex items-start justify-between gap-3">
+      <div className="absolute inset-0 flex items-end justify-center p-0 sm:items-center sm:p-6">
+        <div className="flex h-[100dvh] w-full flex-col overflow-hidden border bg-white shadow-2xl animate-fadeUp sm:h-auto sm:max-h-[88vh] sm:max-w-5xl sm:rounded-3xl">
+          <div className="flex items-start justify-between gap-3 border-b px-4 py-4 sm:px-6">
             <div className="min-w-0">
-              <h2 className="text-lg sm:text-xl font-semibold truncate">Nuevo producto</h2>
-              <p className="text-xs sm:text-sm text-zinc-500">
-                Alta completa · imagen principal + carrusel · variantes con stock
+              <h2 className="truncate text-lg font-semibold sm:text-xl">
+                Nuevo producto
+              </h2>
+              <p className="text-xs text-zinc-500 sm:text-sm">
+                Alta completa · imagen principal + carrusel · variantes con
+                stock
               </p>
             </div>
             <button
@@ -316,7 +360,7 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
             </button>
           </div>
 
-          <div className="px-4 sm:px-6 py-3 border-b flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 border-b px-4 py-3 sm:px-6">
             <button onClick={() => setStep(1)}>
               <StepPill active={step === 1} done={canStep2}>
                 Datos
@@ -335,20 +379,24 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
           </div>
 
           <div className="flex-1 overflow-auto">
-            <div className="px-4 sm:px-6 py-5 grid gap-4 lg:grid-cols-[1fr_360px]">
+            <div className="grid gap-4 px-4 py-5 sm:px-6 lg:grid-cols-[1fr_360px]">
               <div className="space-y-4">
                 {step === 1 && (
                   <section className="rounded-2xl border p-4 sm:p-5">
                     <div className="flex items-center justify-between">
                       <div>
                         <div className="text-sm font-semibold">Datos base</div>
-                        <div className="text-xs text-zinc-500">Título, precio, SKU, categoría.</div>
+                        <div className="text-xs text-zinc-500">
+                          Título, precio, SKU, categoría.
+                        </div>
                       </div>
                     </div>
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <label className="block sm:col-span-2">
-                        <span className="text-xs font-medium text-zinc-700">Título</span>
+                        <span className="text-xs font-medium text-zinc-700">
+                          Título
+                        </span>
                         <input
                           value={title}
                           onChange={(e) => setTitle(e.target.value)}
@@ -358,7 +406,9 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                       </label>
 
                       <label className="block">
-                        <span className="text-xs font-medium text-zinc-700">SKU</span>
+                        <span className="text-xs font-medium text-zinc-700">
+                          SKU
+                        </span>
                         <input
                           value={sku}
                           onChange={(e) => setSku(e.target.value)}
@@ -368,7 +418,9 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                       </label>
 
                       <label className="block">
-                        <span className="text-xs font-medium text-zinc-700">Precio</span>
+                        <span className="text-xs font-medium text-zinc-700">
+                          Precio
+                        </span>
                         <input
                           type="number"
                           value={price}
@@ -378,7 +430,9 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                       </label>
 
                       <label className="block">
-                        <span className="text-xs font-medium text-zinc-700">Categoría</span>
+                        <span className="text-xs font-medium text-zinc-700">
+                          Categoría
+                        </span>
                         <select
                           value={category}
                           onChange={(e) => setCategory(e.target.value)}
@@ -393,7 +447,9 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                       </label>
 
                       <label className="block">
-                        <span className="text-xs font-medium text-zinc-700">Estado</span>
+                        <span className="text-xs font-medium text-zinc-700">
+                          Estado
+                        </span>
                         <select
                           value={status}
                           onChange={(e) => setStatus(e.target.value)}
@@ -404,7 +460,7 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                         </select>
                       </label>
 
-                      <div className="sm:col-span-2 mt-2 flex flex-col sm:flex-row gap-2">
+                      <div className="mt-2 flex flex-col gap-2 sm:col-span-2 sm:flex-row">
                         <button
                           onClick={() => setStep(2)}
                           disabled={!canStep2}
@@ -412,7 +468,7 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                             "rounded-xl px-4 py-2 text-sm",
                             canStep2
                               ? "bg-zinc-900 text-white hover:opacity-95"
-                              : "bg-zinc-200 text-zinc-500 cursor-not-allowed",
+                              : "cursor-not-allowed bg-zinc-200 text-zinc-500",
                           ].join(" ")}
                         >
                           Continuar a imágenes
@@ -429,22 +485,31 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                 )}
 
                 {step === 2 && (
-                  <section className="rounded-2xl border p-4 sm:p-5 space-y-4">
+                  <section className="space-y-4 rounded-2xl border p-4 sm:p-5">
                     <div>
                       <div className="text-sm font-semibold">Imágenes</div>
                       <div className="text-xs text-zinc-500">
-                        Define una <b>imagen principal</b> y agrega imágenes al <b>carrusel</b>.
+                        Define una <b>imagen principal</b> y agrega imágenes al{" "}
+                        <b>carrusel</b>.
                       </div>
                     </div>
 
+                    {processingImages ? (
+                      <div className="rounded-xl border bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        Optimizando imágenes antes de enviarlas...
+                      </div>
+                    ) : null}
+
                     <div className="rounded-2xl border p-4">
                       <div className="flex items-center justify-between">
-                        <div className="text-sm font-semibold">Imagen principal</div>
+                        <div className="text-sm font-semibold">
+                          Imagen principal
+                        </div>
                         <span className="text-xs text-zinc-500">Hero</span>
                       </div>
 
-                      <div className="mt-3 flex flex-col sm:flex-row gap-2">
-                        <label className="rounded-xl bg-zinc-900 text-white px-4 py-2 text-sm hover:opacity-95 inline-flex items-center justify-center gap-2 cursor-pointer">
+                      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                        <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-zinc-900 px-4 py-2 text-sm text-white hover:opacity-95">
                           <Upload size={16} />
                           Subir imagen principal
                           <input
@@ -468,12 +533,16 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
 
                     <div className="rounded-2xl border p-4">
                       <div className="flex items-center justify-between">
-                        <div className="text-sm font-semibold">Carrusel (poses)</div>
-                        <span className="text-xs text-zinc-500">{gallery.length} imágenes</span>
+                        <div className="text-sm font-semibold">
+                          Carrusel (poses)
+                        </div>
+                        <span className="text-xs text-zinc-500">
+                          {gallery.length} imágenes
+                        </span>
                       </div>
 
                       <div className="mt-3">
-                        <label className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50 inline-flex items-center justify-center gap-2 cursor-pointer">
+                        <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50">
                           <Plus size={16} />
                           Agregar imágenes al carrusel
                           <input
@@ -486,12 +555,16 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                         </label>
                       </div>
 
-                      <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
                         {gallery.map((g) => (
                           <div key={g.id} className="rounded-2xl border p-2">
-                            <div className="aspect-square rounded-xl bg-zinc-100 overflow-hidden flex items-center justify-center">
+                            <div className="flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-zinc-100">
                               {g.url ? (
-                                <img src={g.url} alt={g.name || ""} className="h-full w-full object-cover" />
+                                <img
+                                  src={g.url}
+                                  alt={g.name || ""}
+                                  className="h-full w-full object-cover"
+                                />
                               ) : (
                                 <ImgIcon className="text-zinc-400" />
                               )}
@@ -500,7 +573,7 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                             <div className="mt-2 flex gap-2">
                               <button
                                 onClick={() => makeHeroFromGallery(g)}
-                                className="flex-1 rounded-xl bg-zinc-900 text-white py-1.5 text-xs hover:opacity-95"
+                                className="flex-1 rounded-xl bg-zinc-900 py-1.5 text-xs text-white hover:opacity-95"
                               >
                                 Hacer principal
                               </button>
@@ -517,13 +590,13 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                       </div>
 
                       {gallery.length === 0 && (
-                        <div className="mt-3 rounded-xl bg-zinc-50 border p-3 text-sm text-zinc-600">
+                        <div className="mt-3 rounded-xl border bg-zinc-50 p-3 text-sm text-zinc-600">
                           Aún no agregas imágenes al carrusel.
                         </div>
                       )}
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <button
                         onClick={() => setStep(1)}
                         className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
@@ -532,12 +605,12 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                       </button>
                       <button
                         onClick={() => setStep(3)}
-                        disabled={!canStep3}
+                        disabled={!canStep3 || processingImages}
                         className={[
                           "rounded-xl px-4 py-2 text-sm",
-                          canStep3
+                          canStep3 && !processingImages
                             ? "bg-zinc-900 text-white hover:opacity-95"
-                            : "bg-zinc-200 text-zinc-500 cursor-not-allowed",
+                            : "cursor-not-allowed bg-zinc-200 text-zinc-500",
                         ].join(" ")}
                       >
                         Continuar a variantes
@@ -547,17 +620,22 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                 )}
 
                 {step === 3 && (
-                  <section className="rounded-2xl border p-4 sm:p-5 space-y-4">
+                  <section className="space-y-4 rounded-2xl border p-4 sm:p-5">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold">Variantes + Stock</div>
+                        <div className="text-sm font-semibold">
+                          Variantes + Stock
+                        </div>
                         <div className="text-xs text-zinc-500">
-                          Selecciona colores y tallas. Luego asigna <b>stock por combinación</b>.
+                          Selecciona colores y tallas. Luego asigna{" "}
+                          <b>stock por combinación</b>.
                         </div>
                       </div>
                       <div className="text-right">
                         <div className="text-xs text-zinc-500">Stock total</div>
-                        <div className="text-lg font-semibold">{totalStock}</div>
+                        <div className="text-lg font-semibold">
+                          {totalStock}
+                        </div>
                       </div>
                     </div>
 
@@ -565,10 +643,12 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                       <div className="rounded-2xl border p-4">
                         <div className="flex items-center justify-between">
                           <div className="text-sm font-semibold">Colores</div>
-                          <span className="text-xs text-zinc-500">{selectedColorIds.length} seleccionados</span>
+                          <span className="text-xs text-zinc-500">
+                            {selectedColorIds.length} seleccionados
+                          </span>
                         </div>
 
-                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                           {colors.map((c) => {
                             const active = selectedColorIds.includes(c.name);
                             return (
@@ -576,11 +656,13 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                                 key={c.name}
                                 onClick={() => toggleColor(c.name)}
                                 className={[
-                                  "rounded-xl border px-3 py-2 text-xs flex items-center gap-2 justify-between",
-                                  active ? "bg-zinc-900 text-white border-zinc-900" : "bg-white hover:bg-zinc-50",
+                                  "flex items-center justify-between rounded-xl border px-3 py-2 text-xs",
+                                  active
+                                    ? "border-zinc-900 bg-zinc-900 text-white"
+                                    : "bg-white hover:bg-zinc-50",
                                 ].join(" ")}
                               >
-                                <span className="flex items-center gap-2 min-w-0">
+                                <span className="flex min-w-0 items-center gap-2">
                                   <Swatch hex={c.hex} />
                                   <span className="truncate">{c.name}</span>
                                 </span>
@@ -590,22 +672,26 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                           })}
                         </div>
 
-                        <div className="mt-4 rounded-xl bg-zinc-50 border p-3">
-                          <div className="text-xs font-semibold text-zinc-700 flex items-center gap-2">
+                        <div className="mt-4 rounded-xl border bg-zinc-50 p-3">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-zinc-700">
                             <Palette size={14} /> Agregar color
                           </div>
 
                           <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
                             <input
                               value={customColorName}
-                              onChange={(e) => setCustomColorName(e.target.value)}
+                              onChange={(e) =>
+                                setCustomColorName(e.target.value)
+                              }
                               className="rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
                               placeholder="Nombre (ej. Lila)"
                             />
                             <input
                               type="color"
                               value={customColorHex}
-                              onChange={(e) => setCustomColorHex(e.target.value)}
+                              onChange={(e) =>
+                                setCustomColorHex(e.target.value)
+                              }
                               className="h-10 w-12 rounded-xl border bg-white"
                               aria-label="Hex"
                             />
@@ -626,7 +712,9 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                       <div className="rounded-2xl border p-4">
                         <div className="flex items-center justify-between">
                           <div className="text-sm font-semibold">Tallas</div>
-                          <span className="text-xs text-zinc-500">{selectedSizes.length} seleccionadas</span>
+                          <span className="text-xs text-zinc-500">
+                            {selectedSizes.length} seleccionadas
+                          </span>
                         </div>
 
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -638,7 +726,9 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                                 onClick={() => toggleSize(sz)}
                                 className={[
                                   "rounded-xl border px-3 py-2 text-xs",
-                                  active ? "bg-zinc-900 text-white border-zinc-900" : "bg-white hover:bg-zinc-50",
+                                  active
+                                    ? "border-zinc-900 bg-zinc-900 text-white"
+                                    : "bg-white hover:bg-zinc-50",
                                 ].join(" ")}
                               >
                                 {sz}
@@ -648,24 +738,34 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                         </div>
 
                         <p className="mt-3 text-[12px] text-zinc-500">
-                          Tip: si vendes “Unitalla”, puedes dejar solo esa seleccionada.
+                          Tip: si vendes “Unitalla”, puedes dejar solo esa
+                          seleccionada.
                         </p>
                       </div>
                     </div>
 
                     <div className="rounded-2xl border p-4">
                       <div className="flex items-center justify-between">
-                        <div className="text-sm font-semibold">Stock por variante</div>
-                        <span className="text-xs text-zinc-500">color × talla</span>
+                        <div className="text-sm font-semibold">
+                          Stock por variante
+                        </div>
+                        <span className="text-xs text-zinc-500">
+                          color × talla
+                        </span>
                       </div>
 
-                      <div className="mt-3 hidden md:block overflow-auto rounded-2xl border">
+                      <div className="mt-3 hidden overflow-auto rounded-2xl border md:block">
                         <table className="min-w-full text-sm">
                           <thead className="bg-zinc-50">
                             <tr>
-                              <th className="text-left px-4 py-3 font-semibold text-zinc-700">Color</th>
+                              <th className="px-4 py-3 text-left font-semibold text-zinc-700">
+                                Color
+                              </th>
                               {selectedSizes.map((sz) => (
-                                <th key={sz} className="text-left px-4 py-3 font-semibold text-zinc-700">
+                                <th
+                                  key={sz}
+                                  className="px-4 py-3 text-left font-semibold text-zinc-700"
+                                >
                                   {sz}
                                 </th>
                               ))}
@@ -673,13 +773,17 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                           </thead>
                           <tbody className="bg-white">
                             {selectedColorIds.map((colorName) => {
-                              const color = colors.find((c) => c.name === colorName);
+                              const color = colors.find(
+                                (c) => c.name === colorName,
+                              );
                               return (
                                 <tr key={colorName} className="border-t">
                                   <td className="px-4 py-3">
                                     <div className="flex items-center gap-2">
                                       <Swatch hex={color?.hex || "#111827"} />
-                                      <span className="font-medium">{colorName}</span>
+                                      <span className="font-medium">
+                                        {colorName}
+                                      </span>
                                     </div>
                                   </td>
                                   {selectedSizes.map((sz) => (
@@ -688,7 +792,13 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                                         type="number"
                                         min={0}
                                         value={stockOf(colorName, sz)}
-                                        onChange={(e) => setStock(colorName, sz, e.target.value)}
+                                        onChange={(e) =>
+                                          setStock(
+                                            colorName,
+                                            sz,
+                                            e.target.value,
+                                          )
+                                        }
                                         className="w-24 rounded-xl border px-3 py-2 text-sm"
                                       />
                                     </td>
@@ -700,35 +810,51 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                         </table>
                       </div>
 
-                      <div className="md:hidden space-y-3">
+                      <div className="space-y-3 md:hidden">
                         {selectedColorIds.map((colorName) => {
-                          const color = colors.find((c) => c.name === colorName);
+                          const color = colors.find(
+                            (c) => c.name === colorName,
+                          );
                           const sumColor = selectedSizes.reduce(
                             (acc, sz) => acc + stockOf(colorName, sz),
-                            0
+                            0,
                           );
 
                           return (
-                            <div key={colorName} className="rounded-2xl border bg-white p-4">
+                            <div
+                              key={colorName}
+                              className="rounded-2xl border bg-white p-4"
+                            >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2">
                                     <Swatch hex={color?.hex || "#111827"} />
-                                    <div className="font-semibold">{colorName}</div>
+                                    <div className="font-semibold">
+                                      {colorName}
+                                    </div>
                                   </div>
-                                  <div className="text-xs text-zinc-500">Total color: {sumColor}</div>
+                                  <div className="text-xs text-zinc-500">
+                                    Total color: {sumColor}
+                                  </div>
                                 </div>
                               </div>
 
                               <div className="mt-3 grid grid-cols-2 gap-2">
                                 {selectedSizes.map((sz) => (
-                                  <label key={sz} className="rounded-xl border p-3">
-                                    <div className="text-xs font-semibold text-zinc-700">{sz}</div>
+                                  <label
+                                    key={sz}
+                                    className="rounded-xl border p-3"
+                                  >
+                                    <div className="text-xs font-semibold text-zinc-700">
+                                      {sz}
+                                    </div>
                                     <input
                                       type="number"
                                       min={0}
                                       value={stockOf(colorName, sz)}
-                                      onChange={(e) => setStock(colorName, sz, e.target.value)}
+                                      onChange={(e) =>
+                                        setStock(colorName, sz, e.target.value)
+                                      }
                                       className="mt-2 w-full rounded-xl border px-3 py-2 text-sm"
                                     />
                                   </label>
@@ -739,14 +865,14 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                         })}
 
                         {selectedColorIds.length === 0 && (
-                          <div className="rounded-xl bg-zinc-50 border p-3 text-sm text-zinc-600">
+                          <div className="rounded-xl border bg-zinc-50 p-3 text-sm text-zinc-600">
                             Selecciona al menos un color.
                           </div>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <button
                         onClick={() => setStep(2)}
                         className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
@@ -755,12 +881,14 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                       </button>
                       <button
                         onClick={handleSave}
-                        disabled={!title.trim() || totalStock === 0}
+                        disabled={
+                          !title.trim() || totalStock === 0 || processingImages
+                        }
                         className={[
                           "rounded-xl px-4 py-2 text-sm",
-                          title.trim() && totalStock > 0
+                          title.trim() && totalStock > 0 && !processingImages
                             ? "bg-zinc-900 text-white hover:opacity-95"
-                            : "bg-zinc-200 text-zinc-500 cursor-not-allowed",
+                            : "cursor-not-allowed bg-zinc-200 text-zinc-500",
                         ].join(" ")}
                       >
                         Guardar producto
@@ -770,15 +898,19 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                 )}
               </div>
 
-              <aside className="rounded-2xl border p-4 sm:p-5 h-fit sticky top-4">
+              <aside className="sticky top-4 h-fit rounded-2xl border p-4 sm:p-5">
                 <div className="text-sm font-semibold">Preview</div>
                 <div className="text-xs text-zinc-500">Así se verá</div>
 
-                <div className="mt-3 aspect-square rounded-2xl bg-zinc-100 overflow-hidden flex items-center justify-center">
+                <div className="mt-3 flex aspect-square items-center justify-center overflow-hidden rounded-2xl bg-zinc-100">
                   {heroUrl ? (
-                    <img src={heroUrl} alt="" className="h-full w-full object-cover" />
+                    <img
+                      src={heroUrl}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
-                    <div className="text-zinc-400 flex flex-col items-center gap-2">
+                    <div className="flex flex-col items-center gap-2 text-zinc-400">
                       <ImgIcon />
                       <span className="text-xs">Sin imagen principal</span>
                     </div>
@@ -791,27 +923,36 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                       key={img.id}
                       onClick={() => setHeroUrl(img.url)}
                       className={[
-                        "h-14 w-14 rounded-xl border overflow-hidden bg-zinc-100 flex-none",
+                        "h-14 w-14 flex-none overflow-hidden rounded-xl border bg-zinc-100",
                         img.url === heroUrl ? "ring-2 ring-zinc-900" : "",
                       ].join(" ")}
                       aria-label="Seleccionar"
                     >
-                      <img src={img.url} alt="" className="h-full w-full object-cover" />
+                      <img
+                        src={img.url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
                     </button>
                   ))}
                 </div>
 
-                <div className="mt-4 rounded-2xl bg-zinc-50 border p-3 text-sm">
-                  <div className="font-semibold truncate">{title || "Producto"}</div>
+                <div className="mt-4 rounded-2xl border bg-zinc-50 p-3 text-sm">
+                  <div className="truncate font-semibold">
+                    {title || "Producto"}
+                  </div>
                   <div className="text-xs text-zinc-500">SKU: {sku || "—"}</div>
                   <div className="mt-2 flex items-center justify-between">
                     <span className="text-zinc-600">Precio</span>
-                    <span className="font-semibold">${Number(price || 0).toLocaleString()}</span>
+                    <span className="font-semibold">
+                      ${Number(price || 0).toLocaleString()}
+                    </span>
                   </div>
                   <div className="mt-2 flex items-center justify-between">
                     <span className="text-zinc-600">Variantes</span>
                     <span className="font-semibold">
-                      {selectedColorIds.length} colores · {selectedSizes.length} tallas
+                      {selectedColorIds.length} colores · {selectedSizes.length}{" "}
+                      tallas
                     </span>
                   </div>
                   <div className="mt-2 flex items-center justify-between">
@@ -829,7 +970,13 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
                   </button>
                   <button
                     onClick={() => setStep((s) => Math.min(3, s + 1))}
-                    className="rounded-xl bg-zinc-900 text-white px-4 py-2 text-sm hover:opacity-95"
+                    disabled={processingImages}
+                    className={[
+                      "rounded-xl px-4 py-2 text-sm text-white",
+                      processingImages
+                        ? "cursor-not-allowed bg-zinc-400"
+                        : "bg-zinc-900 hover:opacity-95",
+                    ].join(" ")}
                   >
                     Continuar
                   </button>
@@ -838,10 +985,11 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
             </div>
           </div>
 
-          <div className="px-4 sm:px-6 py-3 border-t flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-2 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div className="text-xs text-zinc-600">
-              {category} · ${Number(price || 0).toLocaleString()} · {selectedColorIds.length} colores ·{" "}
-              {selectedSizes.length} tallas · {totalStock} stock
+              {category} · ${Number(price || 0).toLocaleString()} ·{" "}
+              {selectedColorIds.length} colores · {selectedSizes.length} tallas
+              · {totalStock} stock
             </div>
 
             <div className="flex gap-2">
@@ -853,12 +1001,12 @@ export default function NewProductModal({ open, onClose, onSave, saving = false 
               </button>
               <button
                 onClick={handleSave}
-                disabled={!title.trim() || totalStock === 0}
+                disabled={!title.trim() || totalStock === 0 || processingImages}
                 className={[
                   "rounded-xl px-4 py-2 text-sm",
-                  title.trim() && totalStock > 0
+                  title.trim() && totalStock > 0 && !processingImages
                     ? "bg-zinc-900 text-white hover:opacity-95"
-                    : "bg-zinc-200 text-zinc-500 cursor-not-allowed",
+                    : "cursor-not-allowed bg-zinc-200 text-zinc-500",
                 ].join(" ")}
               >
                 Guardar producto
