@@ -34,8 +34,10 @@ const ProductCard = memo(function ProductCard({
   product,
   onOpen,
   onPrefetch,
+  onShare,
   priority = false,
 }) {
+  const [copiado, setCopiado] = useState(false);
   const image = product?.images?.[0] || product?.image || "";
 
   const handleClick = useCallback(() => {
@@ -46,70 +48,103 @@ const ProductCard = memo(function ProductCard({
     onPrefetch?.(product);
   }, [onPrefetch, product]);
 
+  const handleShare = useCallback(async () => {
+    if (!onShare || !product?.id) return;
+
+    const resultado = await onShare(product);
+
+    if (resultado) {
+      setCopiado(true);
+
+      window.setTimeout(() => {
+        setCopiado(false);
+      }, 1600);
+    }
+  }, [onShare, product]);
+
   return (
-    <button
-      type="button"
-      onClick={handleClick}
+    <article
       onMouseEnter={handlePrefetch}
       onFocus={handlePrefetch}
       onTouchStart={handlePrefetch}
       className={[
-        "group relative block w-full overflow-hidden rounded-[28px] text-left",
+        "group relative block w-full overflow-hidden rounded-[28px]",
         "bg-neutral-200 shadow-[0_8px_24px_rgba(0,0,0,0.08)]",
         "transition-all duration-500",
         "hover:-translate-y-1 hover:shadow-[0_18px_40px_rgba(0,0,0,0.14)]",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-black/20",
+        "focus-within:ring-2 focus-within:ring-black/20",
       ].join(" ")}
     >
-      <div className="relative h-[420px] overflow-hidden sm:h-[500px] lg:h-[560px]">
-        {image ? (
-          <img
-            src={image}
-            alt={product?.name || product?.title || "Producto"}
-            loading={priority ? "eager" : "lazy"}
-            fetchPriority={priority ? "high" : "low"}
-            decoding="async"
-            sizes="(min-width: 1280px) 28vw, (min-width: 1024px) 31vw, (min-width: 640px) 48vw, 82vw"
-            className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.05]"
-          />
-        ) : (
-          <div className="h-full w-full bg-gradient-to-br from-neutral-200 via-neutral-100 to-white" />
-        )}
+      <button
+        type="button"
+        onClick={handleClick}
+        className="block w-full text-left focus:outline-none"
+        aria-label={`Ver ${product?.name || product?.title || "producto"}`}
+      >
+        <div className="relative h-[420px] overflow-hidden sm:h-[500px] lg:h-[560px]">
+          {image ? (
+            <img
+              src={image}
+              alt={product?.name || product?.title || "Producto"}
+              loading={priority ? "eager" : "lazy"}
+              fetchPriority={priority ? "high" : "low"}
+              decoding="async"
+              sizes="(min-width: 1280px) 28vw, (min-width: 1024px) 31vw, (min-width: 640px) 48vw, 82vw"
+              className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.05]"
+            />
+          ) : (
+            <div className="h-full w-full bg-gradient-to-br from-neutral-200 via-neutral-100 to-white" />
+          )}
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/5" />
-        <div className="absolute inset-0 bg-black/10 transition duration-500 group-hover:bg-black/20" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-black/5" />
+          <div className="absolute inset-0 bg-black/10 transition duration-500 group-hover:bg-black/20" />
 
-        {product?.badge ? (
-          <span className="absolute right-4 top-4 rounded-full bg-white/90 px-3 py-1 text-[11px] font-bold tracking-wide text-black shadow-sm backdrop-blur">
-            {product.badge}
-          </span>
-        ) : null}
-
-        <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <h3 className="truncate text-[24px] font-extrabold leading-none tracking-tight text-white drop-shadow-md sm:text-[28px] md:text-[32px]">
-                {product?.name || product?.title || "Producto"}
-              </h3>
-
-              <p className="mt-2 text-base font-semibold text-white/95 drop-shadow sm:text-lg">
-                {formatPrice(product?.price)}
-              </p>
-            </div>
-
-            <span
-              className={[
-                "mb-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
-                "border border-white/30 bg-white/15 text-white backdrop-blur-md",
-                "transition-all duration-300 group-hover:bg-white group-hover:text-black",
-              ].join(" ")}
-            >
-              ↗
+          {product?.badge ? (
+            <span className="absolute right-4 top-4 rounded-full bg-white/90 px-3 py-1 text-[11px] font-bold tracking-wide text-black shadow-sm backdrop-blur">
+              {product.badge}
             </span>
+          ) : null}
+
+          <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
+            <div className="flex items-end justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="truncate text-[24px] font-extrabold leading-none tracking-tight text-white drop-shadow-md sm:text-[28px] md:text-[32px]">
+                  {product?.name || product?.title || "Producto"}
+                </h3>
+
+                <p className="mt-2 text-base font-semibold text-white/95 drop-shadow sm:text-lg">
+                  {formatPrice(product?.price)}
+                </p>
+              </div>
+
+              <span
+                className={[
+                  "mb-1 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
+                  "border border-white/30 bg-white/15 text-white backdrop-blur-md",
+                  "transition-all duration-300 group-hover:bg-white group-hover:text-black",
+                ].join(" ")}
+              >
+                ↗
+              </span>
+            </div>
           </div>
         </div>
-      </div>
-    </button>
+      </button>
+
+      <button
+        type="button"
+        onClick={handleShare}
+        className={[
+          "absolute left-4 top-4 z-20 inline-flex h-10 items-center justify-center rounded-full px-4",
+          "border border-white/30 bg-white/90 text-xs font-bold text-black shadow-sm backdrop-blur-md",
+          "transition hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80",
+        ].join(" ")}
+        aria-label={`Compartir ${product?.name || product?.title || "producto"}`}
+        title="Compartir producto"
+      >
+        {copiado ? "COPIADO" : "COMPARTIR"}
+      </button>
+    </article>
   );
 });
 
@@ -117,6 +152,7 @@ export default memo(function ProductGrid({
   items = [],
   onOpen,
   onPrefetch,
+  onShare,
   title = "Nueva colección",
   subtitle = "Explora piezas seleccionadas para ti.",
 }) {
@@ -139,6 +175,7 @@ export default memo(function ProductGrid({
       if (prev.left === nextState.left && prev.right === nextState.right) {
         return prev;
       }
+
       return nextState;
     });
   }, []);
@@ -178,6 +215,7 @@ export default memo(function ProductGrid({
     if (!el) return;
 
     const step = Math.max(320, Math.floor(el.clientWidth * 0.88));
+
     el.scrollBy({
       left: dir === "left" ? -step : step,
       behavior: "smooth",
@@ -238,6 +276,7 @@ export default memo(function ProductGrid({
                     product={product}
                     onOpen={onOpen}
                     onPrefetch={onPrefetch}
+                    onShare={onShare}
                     priority={index < 2}
                   />
                 </div>

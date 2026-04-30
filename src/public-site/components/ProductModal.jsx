@@ -17,7 +17,18 @@ const PRICE_FORMATTER = new Intl.NumberFormat("es-MX", {
   currency: "MXN",
 });
 
-const ORDEN_TALLAS = ["XS", "S", "SM", "M", "ML", "L", "LX", "XL", "XXL", "UNITALLA"];
+const ORDEN_TALLAS = [
+  "XS",
+  "S",
+  "SM",
+  "M",
+  "ML",
+  "L",
+  "LX",
+  "XL",
+  "XXL",
+  "UNITALLA",
+];
 
 function buildVariantKey(color = "", talla = "") {
   return `${String(color).trim()}__${String(talla).trim()}`;
@@ -60,6 +71,7 @@ export default function ProductModal({
   product,
   onClose,
   onAddToCart,
+  onShare,
   loading = false,
   error = "",
 }) {
@@ -69,12 +81,14 @@ export default function ProductModal({
   const [qty, setQty] = useState(1);
   const [zoom, setZoom] = useState(false);
   const [mostrarReviews, setMostrarReviews] = useState(false);
+  const [copiado, setCopiado] = useState(false);
 
   const startX = useRef(null);
   const { addItem } = useCart();
 
   const images = useMemo(() => product?.images ?? [], [product]);
   const colors = useMemo(() => product?.colors ?? [], [product]);
+
   const sizes = useMemo(() => {
     const tallas = product?.sizes ?? [];
 
@@ -95,6 +109,7 @@ export default function ProductModal({
       return indexA - indexB;
     });
   }, [product]);
+
   const variantStockMap = useMemo(() => product?.variantStockMap ?? {}, [product]);
 
   const getStock = useCallback(
@@ -138,6 +153,7 @@ export default function ProductModal({
     setZoom(false);
     setQty(1);
     setMostrarReviews(false);
+    setCopiado(false);
 
     const primerColorDisponible =
       colors.find((c) => Number(colorStockMap[c.name] || 0) > 0)?.name || null;
@@ -147,6 +163,7 @@ export default function ProductModal({
     if (primerColorDisponible) {
       const primeraTallaDisponible =
         sizes.find((size) => getStock(primerColorDisponible, size) > 0) || null;
+
       setSelectedSize(primeraTallaDisponible);
     } else {
       setSelectedSize(null);
@@ -192,7 +209,10 @@ export default function ProductModal({
     };
 
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
   }, [open, onClose, next, prev]);
 
   useEffect(() => {
@@ -224,9 +244,24 @@ export default function ProductModal({
     [next, prev],
   );
 
+  const handleShare = useCallback(async () => {
+    if (!onShare || !product?.id) return;
+
+    const resultado = await onShare(product);
+
+    if (resultado) {
+      setCopiado(true);
+
+      window.setTimeout(() => {
+        setCopiado(false);
+      }, 1600);
+    }
+  }, [onShare, product]);
+
   if (!open || !product) return null;
 
   const currentImage = images[imgIndex];
+
   const puedeAgregar =
     !loading &&
     !error &&
@@ -252,17 +287,34 @@ export default function ProductModal({
           aria-modal="true"
         >
           <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
-            <h3 className="text-base font-semibold sm:text-lg">{product.name}</h3>
+            <h3 className="min-w-0 truncate text-base font-semibold sm:text-lg">
+              {product.name}
+            </h3>
 
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-full p-2 transition hover:bg-gray-100"
-              aria-label="Cerrar"
-              title="Cerrar"
-            >
-              ✕
-            </button>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={handleShare}
+                className={[
+                  "rounded-full border border-gray-200 px-4 py-2 text-xs font-bold",
+                  "transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50",
+                ].join(" ")}
+                disabled={!product?.id}
+                title="Compartir producto"
+              >
+                {copiado ? "COPIADO" : "COMPARTIR"}
+              </button>
+
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-full p-2 transition hover:bg-gray-100"
+                aria-label="Cerrar"
+                title="Cerrar"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           <div className="grid h-[calc(92vh-64px)] grid-cols-1 lg:grid-cols-2">
@@ -300,13 +352,16 @@ export default function ProductModal({
                       type="button"
                       onClick={prev}
                       className="absolute left-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow hover:bg-white"
+                      aria-label="Imagen anterior"
                     >
                       ‹
                     </button>
+
                     <button
                       type="button"
                       onClick={next}
                       className="absolute right-3 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 shadow hover:bg-white"
+                      aria-label="Imagen siguiente"
                     >
                       ›
                     </button>
@@ -328,6 +383,7 @@ export default function ProductModal({
                         "shrink-0 overflow-hidden rounded-xl border",
                         idx === imgIndex ? "border-black" : "border-transparent",
                       ].join(" ")}
+                      aria-label={`Ver imagen ${idx + 1}`}
                     >
                       <img
                         src={src}
@@ -397,6 +453,7 @@ export default function ProductModal({
                               className="h-4 w-4 rounded-full border"
                               style={{ background: c.hex }}
                             />
+
                             {c.name}
                           </button>
                         );

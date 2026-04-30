@@ -24,6 +24,7 @@ const loadProductModal = () => import("./ProductModal");
 const ProductModal = lazy(loadProductModal);
 
 const PAGE_SIZE = 24;
+const PRODUCTO_QUERY_PARAM = "producto";
 
 function ejecutarCuandoIdle(fn, delayFallback = 250) {
   if (typeof window === "undefined") {
@@ -58,12 +59,90 @@ function ejecutarCuandoIdle(fn, delayFallback = 250) {
 }
 
 function ejecutarDespuesDePintar(fn) {
-  if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+  if (
+    typeof window !== "undefined" &&
+    typeof window.requestAnimationFrame === "function"
+  ) {
     window.requestAnimationFrame(() => fn());
     return;
   }
 
   setTimeout(fn, 0);
+}
+
+function esNavegador() {
+  return typeof window !== "undefined";
+}
+
+function leerProductoIdDesdeUrl() {
+  if (!esNavegador()) return "";
+
+  const params = new URLSearchParams(window.location.search);
+  return params.get(PRODUCTO_QUERY_PARAM) || "";
+}
+
+function construirUrlProducto(productId) {
+  if (!esNavegador()) return "";
+
+  const url = new URL(window.location.href);
+  url.searchParams.set(PRODUCTO_QUERY_PARAM, String(productId));
+  return url.toString();
+}
+
+function escribirProductoEnUrl(productId) {
+  if (!esNavegador() || !productId) return;
+
+  const url = new URL(window.location.href);
+  url.searchParams.set(PRODUCTO_QUERY_PARAM, String(productId));
+
+  window.history.pushState({}, "", url.toString());
+}
+
+function limpiarProductoDeUrl() {
+  if (!esNavegador()) return;
+
+  const url = new URL(window.location.href);
+  url.searchParams.delete(PRODUCTO_QUERY_PARAM);
+
+  window.history.pushState({}, "", url.toString());
+}
+
+async function copiarTexto(texto) {
+  if (!esNavegador() || !texto) return false;
+
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(texto);
+    return true;
+  }
+
+  const inputTemporal = document.createElement("textarea");
+  inputTemporal.value = texto;
+  inputTemporal.setAttribute("readonly", "");
+  inputTemporal.style.position = "fixed";
+  inputTemporal.style.opacity = "0";
+
+  document.body.appendChild(inputTemporal);
+  inputTemporal.select();
+
+  const copiado = document.execCommand("copy");
+  document.body.removeChild(inputTemporal);
+
+  return copiado;
+}
+
+function construirProductoTemporal(productId) {
+  return {
+    id: productId,
+    productId,
+    name: "Producto",
+    title: "Producto",
+    description: "",
+    price: 0,
+    images: [],
+    colors: [],
+    sizes: [],
+    variantStockMap: {},
+  };
 }
 
 export default function NewCollection({
@@ -168,6 +247,7 @@ export default function NewCollection({
 
     const cancelar = ejecutarCuandoIdle(() => {
       loadProductModal().catch(() => { });
+
       items.slice(0, 2).forEach((item) => {
         if (item?.id) {
           precargarDetalleProductoPublico(item.id, { cache: true });
@@ -188,20 +268,16 @@ export default function NewCollection({
     return "Descubre piezas disponibles en esta categoría.";
   }, [categoria]);
 
-  const handlePrefetch = useCallback((product) => {
-    if (!product?.id) return;
+  const cargarDetalleProducto = useCallback((productoBase) => {
+    if (!productoBase?.id) return;
 
-    loadProductModal().catch(() => { });
-    precargarDetalleProductoPublico(product.id, { cache: true });
-  }, []);
-
-  const handleOpen = useCallback((product) => {
-    setSelected(product);
+    setSelected(productoBase);
     setOpen(true);
     setErrorDetalle("");
     loadProductModal().catch(() => { });
 
-    const detalleCache = leerDetalleProductoPublicoCache(product.id);
+    const detalleCache = leerDetalleProductoPublicoCache(productoBase.id);
+
     if (detalleCache) {
       setSelected(adaptarProductoBackend(detalleCache));
       setCargandoDetalle(false);
@@ -219,7 +295,7 @@ export default function NewCollection({
 
     ejecutarDespuesDePintar(async () => {
       try {
-        const data = await obtenerDetalleProductoPublico(product.id, {
+        const data = await obtenerDetalleProductoPublico(productoBase.id, {
           signal: controller.signal,
           cache: true,
         });
@@ -229,7 +305,10 @@ export default function NewCollection({
         setSelected(adaptarProductoBackend(data));
       } catch (err) {
         if (err?.name === "AbortError") return;
-        setErrorDetalle(err.message || "No se pudo cargar el detalle del producto");
+
+        setErrorDetalle(
+          err.message || "No se pudo cargar el detalle del producto",
+        );
       } finally {
         if (detalleAbortRef.current === controller) {
           detalleAbortRef.current = null;
@@ -239,10 +318,75 @@ export default function NewCollection({
     });
   }, []);
 
-  const handleClose = useCallback(() => {
+  const handlePrefetch = useCallback((product) => {
+    if (!product?.id) return;
+
+    loadProductModal().catch(() => { });
+    precargarDetalleProductoPublico(product.id, { cache: true });
+  }, []);
+
+  const handleOpen = useCallback(
+    (product) => {
+      if (!product?.id) return;
+
+      escribirProductoEnUrl(product.id);
+      cargarDetalleProducto(product);
+    },
+    [cargarDetalleProducto],
+  );
+
+  const abrirProductoDesdeUrl = useCallback(() => {
+    const productId = leerProductoIdDesdeUrl();
+
+    if (!productId) return;
+
+    if (open && String(selected?.id) === String(productId)) return;
+
+    const productoEnListado = items.find(
+      (item) => String(item?.id) === String(productId),
+    );
+
+    cargarDetalleProducto(productoEnListado || construirProductoTemporal(productId));
+  }, [cargarDetalleProducto, items, open, selected?.id]);
+
+  useEffect(() => {
+    abrirProductoDesdeUrl();
+  }, [abrirProductoDesdeUrl]);
+
+  useEffect(() => {
+    if (!esNavegador()) return undefined;
+
+    const handlePopState = () => {
+      const productId = leerProductoIdDesdeUrl();
+
+      if (!productId) {
+        setOpen(false);
+        setCargandoDetalle(false);
+        setErrorDetalle("");
+        window.setTimeout(() => setSelected(null), 180);
+        return;
+      }
+
+      abrirProductoDesdeUrl();
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [abrirProductoDesdeUrl]);
+
+  const handleClose = useCallback((options = {}) => {
+    const debeLimpiarUrl = options?.limpiarUrl !== false;
+
     if (detalleAbortRef.current) {
       detalleAbortRef.current.abort();
       detalleAbortRef.current = null;
+    }
+
+    if (debeLimpiarUrl) {
+      limpiarProductoDeUrl();
     }
 
     setOpen(false);
@@ -250,6 +394,36 @@ export default function NewCollection({
     setErrorDetalle("");
 
     window.setTimeout(() => setSelected(null), 180);
+  }, []);
+
+  const handleShare = useCallback(async (product) => {
+    if (!product?.id) return false;
+
+    const url = construirUrlProducto(product.id);
+    const title = product?.name || product?.title || "Producto";
+    const text = `Mira este producto: ${title}`;
+
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title,
+          text,
+          url,
+        });
+
+        return true;
+      }
+
+      return await copiarTexto(url);
+    } catch (error) {
+      if (error?.name === "AbortError") return false;
+
+      try {
+        return await copiarTexto(url);
+      } catch {
+        return false;
+      }
+    }
   }, []);
 
   if (cargando && !items.length) {
@@ -276,6 +450,7 @@ export default function NewCollection({
         items={items}
         onOpen={handleOpen}
         onPrefetch={handlePrefetch}
+        onShare={handleShare}
         title={titulo}
         subtitle={subtitulo}
       />
@@ -287,6 +462,7 @@ export default function NewCollection({
             open={open}
             onClose={handleClose}
             onAddToCart={onAddToCart}
+            onShare={handleShare}
             loading={cargandoDetalle}
             error={errorDetalle}
           />
