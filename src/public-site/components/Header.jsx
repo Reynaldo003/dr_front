@@ -10,9 +10,11 @@ import {
   ChevronUp,
   ArrowUpRight,
 } from "lucide-react";
+
 import logo from "../assets/logo2.png";
 import { useCart } from "../context/cart";
 import { categories } from "../data/categories";
+import { buscarProductosPorTerminosPublicos } from "../lib/productosPublicApi";
 import { useAuth } from "../../auth/AuthContext";
 import AuthModal from "./AuthModal";
 
@@ -32,14 +34,87 @@ function slugFromText(value) {
 
 function buildSearchText(item) {
   return normalizeText(
-    [item?.name, item?.slug, item?.href].filter(Boolean).join(" "),
+    [
+      item?.name,
+      item?.slug,
+      item?.href,
+      item?.categoriaApi,
+      ...(Array.isArray(item?.aliases) ? item.aliases : []),
+    ]
+      .filter(Boolean)
+      .join(" "),
   );
+}
+
+function formatMoney(value) {
+  const number = Number(value || 0);
+
+  return number.toLocaleString("es-MX", {
+    style: "currency",
+    currency: "MXN",
+  });
+}
+
+function getProductImage(producto) {
+  return (
+    producto?.imagen_principal_thumb ||
+    producto?.imagen_principal ||
+    producto?.image ||
+    producto?.images?.[0] ||
+    ""
+  );
+}
+
+function getProductTitle(producto) {
+  return producto?.titulo || producto?.name || "Producto";
+}
+
+function getProductHref(producto) {
+  return `/producto/${producto.id}`;
 }
 
 function SearchModal({ open, onClose, items = [] }) {
   const nav = useNavigate();
   const inputRef = useRef(null);
+
   const [query, setQuery] = useState("");
+  const [productos, setProductos] = useState([]);
+  const [buscando, setBuscando] = useState(false);
+  const [error, setError] = useState("");
+
+  const normalizedQuery = normalizeText(query);
+
+  const categoryResults = useMemo(() => {
+    if (!normalizedQuery) return [];
+
+    return items
+      .filter((item) => buildSearchText(item).includes(normalizedQuery))
+      .slice(0, 6);
+  }, [items, normalizedQuery]);
+
+  const terminosBusqueda = useMemo(() => {
+    if (!normalizedQuery || normalizedQuery.length < 2) return [];
+
+    const terminos = [query.trim()];
+
+    categoryResults.forEach((item) => {
+      terminos.push(item.name);
+      terminos.push(item.slug);
+      terminos.push(item.categoriaApi);
+
+      if (Array.isArray(item.aliases)) {
+        terminos.push(...item.aliases);
+      }
+    });
+
+    return Array.from(
+      new Set(
+        terminos
+          .map((termino) => String(termino || "").trim())
+          .filter(Boolean),
+      ),
+    );
+  }, [query, normalizedQuery, categoryResults]);
 
   useEffect(() => {
     if (!open) return;
@@ -62,28 +137,88 @@ function SearchModal({ open, onClose, items = [] }) {
     };
   }, [open, onClose]);
 
-  const normalizedQuery = normalizeText(query);
+  useEffect(() => {
+    if (open) return;
 
-  const results = useMemo(() => {
-    if (!normalizedQuery) return [];
-    return items
-      .filter((item) => buildSearchText(item).includes(normalizedQuery))
-      .slice(0, 8);
-  }, [items, normalizedQuery]);
+    setQuery("");
+    setProductos([]);
+    setBuscando(false);
+    setError("");
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    if (terminosBusqueda.length === 0) {
+      setProductos([]);
+      setBuscando(false);
+      setError("");
+      return;
+    }
+
+    const controller = new AbortController();
+    let activo = true;
+
+    const timer = setTimeout(async () => {
+      try {
+        setBuscando(true);
+        setError("");
+
+        const data = await buscarProductosPorTerminosPublicos(terminosBusqueda, {
+          pageSize: 8,
+          soloDisponibles: true,
+          limiteFinal: 8,
+          signal: controller.signal,
+        });
+
+        if (!activo) return;
+
+        setProductos(data.results || []);
+      } catch (err) {
+        if (!activo || err?.name === "AbortError") return;
+
+        console.error(err);
+        setProductos([]);
+        setError("No se pudieron cargar los productos.");
+      } finally {
+        if (activo) {
+          setBuscando(false);
+        }
+      }
+    }, 300);
+
+    return () => {
+      activo = false;
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [open, terminosBusqueda]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
     if (!normalizedQuery) return;
-    if (results.length === 0) return;
 
-    onClose?.();
-    nav(results[0].href);
+    if (productos.length > 0) {
+      onClose?.();
+      nav(getProductHref(productos[0]));
+      return;
+    }
+
+    if (categoryResults.length > 0) {
+      onClose?.();
+      nav(categoryResults[0].href);
+    }
   };
 
   const handlePickCategory = (item) => {
     onClose?.();
     nav(item.href);
+  };
+
+  const handlePickProduct = (producto) => {
+    onClose?.();
+    nav(getProductHref(producto));
   };
 
   if (!open) return null;
@@ -104,8 +239,9 @@ function SearchModal({ open, onClose, items = [] }) {
               <h3 className="text-lg font-extrabold tracking-tight text-black sm:text-xl">
                 Buscar prendas
               </h3>
+
               <p className="mt-1 text-sm text-black/55">
-                Busca por nombre, categoría o palabra clave.
+                Busca por nombre, categoría, SKU o código.
               </p>
             </div>
 
@@ -121,13 +257,13 @@ function SearchModal({ open, onClose, items = [] }) {
 
           <div className="p-4 sm:p-6">
             <form onSubmit={handleSubmit}>
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row">
                 <input
                   ref={inputRef}
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Ej. blusa, pantalón, vestido rosa..."
+                  placeholder="Ej. set, conjunto, blusa, vestido rosa..."
                   className="h-12 w-full rounded-full border border-black/10 px-5 text-sm outline-none transition focus:border-black/25"
                 />
 
@@ -148,7 +284,7 @@ function SearchModal({ open, onClose, items = [] }) {
                 </p>
 
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {items.slice(0, 8).map((item) => (
+                  {items.slice(0, 10).map((item) => (
                     <button
                       key={item.id}
                       type="button"
@@ -164,47 +300,131 @@ function SearchModal({ open, onClose, items = [] }) {
               <div className="mt-6">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <p className="text-sm font-semibold text-black/55">
-                    {results.length > 0
-                      ? `${results.length} resultado(s)`
-                      : "No encontramos coincidencias"}
+                    {buscando
+                      ? "Buscando productos..."
+                      : `${productos.length + categoryResults.length} resultado(s)`}
                   </p>
                 </div>
 
-                <div className="max-h-[55vh] space-y-3 overflow-y-auto pr-1">
-                  {results.length > 0 ? (
-                    results.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => handlePickCategory(item)}
-                        className="flex w-full items-center justify-between gap-4 rounded-2xl border border-black/10 bg-white px-4 py-4 text-left transition hover:bg-gray-50"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <h4 className="truncate text-base font-bold text-black">
-                            {item.name}
-                          </h4>
+                {error ? (
+                  <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                  </div>
+                ) : null}
 
-                          <p className="mt-1 text-sm text-black/55">
-                            Categoría
-                          </p>
-                        </div>
+                <div className="max-h-[55vh] space-y-5 overflow-y-auto pr-1">
+                  {productos.length > 0 ? (
+                    <section>
+                      <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-black/45">
+                        Productos
+                      </p>
 
-                        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-black">
-                          <ArrowUpRight className="h-4 w-4" strokeWidth={2} />
-                        </span>
-                      </button>
-                    ))
-                  ) : (
+                      <div className="space-y-3">
+                        {productos.map((producto) => {
+                          const image = getProductImage(producto);
+
+                          return (
+                            <button
+                              key={producto.id}
+                              type="button"
+                              onClick={() => handlePickProduct(producto)}
+                              className="flex w-full items-center justify-between gap-4 rounded-2xl border border-black/10 bg-white px-4 py-3 text-left transition hover:bg-gray-50"
+                            >
+                              <div className="flex min-w-0 items-center gap-3">
+                                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl bg-gray-100">
+                                  {image ? (
+                                    <img
+                                      src={image}
+                                      alt={getProductTitle(producto)}
+                                      className="h-full w-full object-cover"
+                                      loading="lazy"
+                                      decoding="async"
+                                    />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center text-xs text-black/35">
+                                      Sin img
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="min-w-0">
+                                  <h4 className="truncate text-sm font-bold text-black sm:text-base">
+                                    {getProductTitle(producto)}
+                                  </h4>
+
+                                  <p className="mt-1 truncate text-xs text-black/50 sm:text-sm">
+                                    {producto.categoria || "Sin categoría"}
+                                  </p>
+
+                                  <p className="mt-1 text-sm font-bold text-black">
+                                    {formatMoney(producto.precio)}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-black">
+                                <ArrowUpRight
+                                  className="h-4 w-4"
+                                  strokeWidth={2}
+                                />
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {categoryResults.length > 0 ? (
+                    <section>
+                      <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-black/45">
+                        Categorías
+                      </p>
+
+                      <div className="space-y-3">
+                        {categoryResults.map((item) => (
+                          <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => handlePickCategory(item)}
+                            className="flex w-full items-center justify-between gap-4 rounded-2xl border border-black/10 bg-white px-4 py-4 text-left transition hover:bg-gray-50"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <h4 className="truncate text-base font-bold text-black">
+                                {item.name}
+                              </h4>
+
+                              <p className="mt-1 text-sm text-black/55">
+                                Ver categoría
+                              </p>
+                            </div>
+
+                            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-black">
+                              <ArrowUpRight
+                                className="h-4 w-4"
+                                strokeWidth={2}
+                              />
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {!buscando &&
+                    productos.length === 0 &&
+                    categoryResults.length === 0 ? (
                     <div className="rounded-3xl border border-dashed border-black/10 bg-gray-50 p-6 text-center">
                       <p className="text-base font-semibold text-black">
                         No encontramos resultados
                       </p>
+
                       <p className="mt-2 text-sm text-black/55">
-                        Intenta con una categoría como blusas, vestidos,
-                        pantalones, shorts o faldas.
+                        Intenta con palabras como sets, conjuntos, blusas,
+                        vestidos, pantalones, shorts o faldas.
                       </p>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </div>
             )}
@@ -287,6 +507,8 @@ export default function Header({ onCartClick }) {
             name: item,
             slug,
             href,
+            categoriaApi: item,
+            aliases: [],
             image: null,
           };
         }
@@ -302,6 +524,8 @@ export default function Header({ onCartClick }) {
           name,
           slug,
           href,
+          categoriaApi: item?.categoriaApi || name,
+          aliases: Array.isArray(item?.aliases) ? item.aliases : [],
           image: item?.image || null,
         };
       })
@@ -356,6 +580,7 @@ export default function Header({ onCartClick }) {
 
     const onDown = (e) => {
       if (!desktopCatalogRef.current) return;
+
       if (!desktopCatalogRef.current.contains(e.target)) {
         setCatalogOpenDesktop(false);
       }
@@ -370,6 +595,7 @@ export default function Header({ onCartClick }) {
 
     const onDown = (e) => {
       if (!desktopAccountRef.current) return;
+
       if (!desktopAccountRef.current.contains(e.target)) {
         setAccountOpenDesktop(false);
       }
@@ -395,7 +621,8 @@ export default function Header({ onCartClick }) {
       setAuthOpen(true);
       return;
     }
-    setAccountOpenMobile((v) => !v);
+
+    setAccountOpenMobile((value) => !value);
   };
 
   const handleAccountClickDesktop = () => {
@@ -403,7 +630,8 @@ export default function Header({ onCartClick }) {
       setAuthOpen(true);
       return;
     }
-    setAccountOpenDesktop((v) => !v);
+
+    setAccountOpenDesktop((value) => !value);
   };
 
   const handleLogout = async () => {
@@ -412,8 +640,8 @@ export default function Header({ onCartClick }) {
       setAccountOpenMobile(false);
       setAccountOpenDesktop(false);
       nav("/", { replace: true });
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error(error);
       alert("No se pudo cerrar sesión. Intenta de nuevo.");
     }
   };
@@ -471,7 +699,7 @@ export default function Header({ onCartClick }) {
                   <UserRound className={headerIconClass} strokeWidth={2} />
                 </button>
 
-                {clienteUser && accountOpenMobile && (
+                {clienteUser && accountOpenMobile ? (
                   <div className="absolute right-12 top-11 z-[70] w-52 rounded-2xl border border-black/10 bg-white p-2 shadow-xl">
                     <div className="px-3 py-2 text-xs font-semibold text-gray-500">
                       {displayName}
@@ -518,7 +746,7 @@ export default function Header({ onCartClick }) {
                       Cerrar sesión
                     </button>
                   </div>
-                )}
+                ) : null}
 
                 <button
                   type="button"
@@ -529,11 +757,11 @@ export default function Header({ onCartClick }) {
                 >
                   <ShoppingBag className={headerIconClass} strokeWidth={2} />
 
-                  {count > 0 && (
+                  {count > 0 ? (
                     <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white px-1 text-[11px] text-black">
                       {count}
                     </span>
-                  )}
+                  ) : null}
                 </button>
               </div>
             </div>
@@ -553,12 +781,13 @@ export default function Header({ onCartClick }) {
               <div className="relative" ref={desktopCatalogRef}>
                 <button
                   type="button"
-                  onClick={() => setCatalogOpenDesktop((v) => !v)}
+                  onClick={() => setCatalogOpenDesktop((value) => !value)}
                   className="inline-flex items-center gap-2 text-white transition hover:opacity-70"
                   aria-expanded={catalogOpenDesktop}
                   aria-haspopup="menu"
                 >
                   CATALOGO
+
                   {catalogOpenDesktop ? (
                     <ChevronUp className="h-4 w-4" strokeWidth={2} />
                   ) : (
@@ -566,7 +795,7 @@ export default function Header({ onCartClick }) {
                   )}
                 </button>
 
-                {catalogOpenDesktop && (
+                {catalogOpenDesktop ? (
                   <div
                     className="absolute left-1/2 top-full z-[80] mt-4 w-[min(980px,94vw)] -translate-x-1/2 rounded-[32px] border border-black/10 bg-white text-black shadow-[0_24px_70px_rgba(0,0,0,0.22)]"
                     role="menu"
@@ -577,6 +806,7 @@ export default function Header({ onCartClick }) {
                           <div className="text-xs font-bold tracking-[0.14em] text-gray-500">
                             CATEGORÍAS
                           </div>
+
                           <p className="mt-1 text-sm text-gray-500">
                             Explora todas las colecciones
                           </p>
@@ -592,26 +822,26 @@ export default function Header({ onCartClick }) {
                       </div>
 
                       <div className="grid grid-cols-2 gap-3 xl:grid-cols-3">
-                        {catalogItems.map((c) => (
+                        {catalogItems.map((item) => (
                           <CategoryMenuCard
-                            key={c.id}
-                            item={c}
+                            key={item.id}
+                            item={item}
                             onClick={() => setCatalogOpenDesktop(false)}
                           />
                         ))}
                       </div>
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
 
-              {topLinks.map((t) => (
+              {topLinks.map((item) => (
                 <Link
-                  key={t.label}
-                  to={t.to}
+                  key={item.label}
+                  to={item.to}
                   className="text-white hover:opacity-70"
                 >
-                  {t.label}
+                  {item.label}
                 </Link>
               ))}
             </nav>
@@ -638,7 +868,7 @@ export default function Header({ onCartClick }) {
                   <UserRound className={headerIconClass} strokeWidth={2} />
                 </button>
 
-                {clienteUser && accountOpenDesktop && (
+                {clienteUser && accountOpenDesktop ? (
                   <div className="absolute right-0 z-[70] mt-3 w-56 rounded-2xl border border-black/10 bg-white p-2 text-black shadow-xl">
                     <div className="px-3 py-2 text-xs font-semibold text-gray-500">
                       {displayName}
@@ -685,7 +915,7 @@ export default function Header({ onCartClick }) {
                       Cerrar sesión
                     </button>
                   </div>
-                )}
+                ) : null}
               </div>
 
               <button
@@ -697,17 +927,17 @@ export default function Header({ onCartClick }) {
               >
                 <ShoppingBag className={headerIconClass} strokeWidth={2} />
 
-                {count > 0 && (
+                {count > 0 ? (
                   <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-white px-1 text-[11px] text-black">
                     {count}
                   </span>
-                )}
+                ) : null}
               </button>
             </div>
           </div>
         </div>
 
-        {menuOpen && (
+        {menuOpen ? (
           <div className="fixed inset-0 z-[60] lg:hidden">
             <button
               type="button"
@@ -732,7 +962,7 @@ export default function Header({ onCartClick }) {
               </div>
 
               <nav className="p-4">
-                {newArrivals && (
+                {newArrivals ? (
                   <Link
                     to={newArrivals.to}
                     onClick={() => setMenuOpen(false)}
@@ -740,15 +970,16 @@ export default function Header({ onCartClick }) {
                   >
                     {newArrivals.label}
                   </Link>
-                )}
+                ) : null}
 
                 <button
                   type="button"
-                  onClick={() => setCatalogOpenMobile((v) => !v)}
+                  onClick={() => setCatalogOpenMobile((value) => !value)}
                   className="mt-3 flex w-full items-center justify-between rounded-2xl border px-4 py-3 font-semibold transition hover:bg-gray-50"
                   aria-expanded={catalogOpenMobile}
                 >
                   <span>CATALOGO</span>
+
                   {catalogOpenMobile ? (
                     <ChevronUp className="h-4 w-4" strokeWidth={2} />
                   ) : (
@@ -756,7 +987,7 @@ export default function Header({ onCartClick }) {
                   )}
                 </button>
 
-                {catalogOpenMobile && (
+                {catalogOpenMobile ? (
                   <ul className="mt-3 space-y-2">
                     {catalogItems.map((item) => (
                       <li key={item.id}>
@@ -770,9 +1001,9 @@ export default function Header({ onCartClick }) {
                       </li>
                     ))}
                   </ul>
-                )}
+                ) : null}
 
-                {rebajas && (
+                {rebajas ? (
                   <Link
                     to={rebajas.to}
                     onClick={() => setMenuOpen(false)}
@@ -780,13 +1011,24 @@ export default function Header({ onCartClick }) {
                   >
                     {rebajas.label}
                   </Link>
-                )}
+                ) : null}
 
                 <div className="mb-3 mt-6 text-xs font-semibold text-gray-500">
                   ACCESOS
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    className="rounded-2xl border px-3 py-3 text-sm transition hover:bg-gray-50"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setSearchOpen(true);
+                    }}
+                  >
+                    Buscar
+                  </button>
+
                   <button
                     type="button"
                     className="rounded-2xl border px-3 py-3 text-sm transition hover:bg-gray-50"
@@ -800,7 +1042,7 @@ export default function Header({ onCartClick }) {
 
                   <button
                     type="button"
-                    className="rounded-2xl border px-3 py-3 text-sm transition hover:bg-gray-50"
+                    className="col-span-2 rounded-2xl border px-3 py-3 text-sm transition hover:bg-gray-50"
                     onClick={() => {
                       setMenuOpen(false);
 
@@ -812,13 +1054,13 @@ export default function Header({ onCartClick }) {
                       setAuthOpen(true);
                     }}
                   >
-                    Cuenta
+                    {clienteUser ? "Mi cuenta" : "Cuenta"}
                   </button>
                 </div>
               </nav>
             </aside>
           </div>
-        )}
+        ) : null}
 
         <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
       </header>
