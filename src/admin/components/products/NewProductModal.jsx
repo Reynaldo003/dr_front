@@ -1,4 +1,3 @@
-//src/admin/component/products/NewProductModal.jsx
 import {
   X,
   Plus,
@@ -38,14 +37,14 @@ const PRODUCT_CATEGORIES = [
   "Blusas",
   "Pantalones",
   "Shorts",
-  "Sueteres y Chamarras",
+  "Chamarras",
   "Faldas",
   "Sacos",
-  "Accesorios",
   "Blazers",
   "Palazzos",
   "Chalecos",
-  "Tops"
+  "Tops",
+  "Accesorios",
 ];
 
 const DEFAULT_SIZES = [
@@ -61,14 +60,23 @@ const DEFAULT_SIZES = [
   "Unitalla",
 ];
 
+const MAX_GALLERY_IMAGES = 10;
+const MAX_FILE_MB = 12;
+
 function uid() {
-  return Math.random().toString(16).slice(2) + Date.now().toString(16);
+  return `${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
 }
 
 function clampInt(v) {
   const n = Number(v);
+
   if (Number.isNaN(n)) return 0;
+
   return Math.max(0, Math.floor(n));
+}
+
+function limpiarTexto(valor) {
+  return String(valor || "").trim();
 }
 
 function Swatch({ hex }) {
@@ -99,9 +107,28 @@ function StepPill({ active, done, children }) {
           •
         </span>
       )}
+
       {children}
     </div>
   );
+}
+
+function validarArchivoImagen(file) {
+  if (!file) return "";
+
+  const tipo = String(file.type || "").toLowerCase();
+
+  if (tipo && !tipo.startsWith("image/")) {
+    return `${file.name} no es una imagen válida.`;
+  }
+
+  const sizeMb = file.size / 1024 / 1024;
+
+  if (sizeMb > MAX_FILE_MB) {
+    return `${file.name} pesa más de ${MAX_FILE_MB} MB.`;
+  }
+
+  return "";
 }
 
 export default function NewProductModal({
@@ -125,18 +152,48 @@ export default function NewProductModal({
   const [selectedColorIds, setSelectedColorIds] = useState(() =>
     DEFAULT_COLORS.slice(0, 2).map((c) => c.name),
   );
-  const sizes = DEFAULT_SIZES;
-  const [selectedSizes, setSelectedSizes] = useState(["S", "M", "L"]);
 
+  const [selectedSizes, setSelectedSizes] = useState(["S", "M", "L"]);
   const [stockMap, setStockMap] = useState({});
 
   const [customColorName, setCustomColorName] = useState("");
   const [customColorHex, setCustomColorHex] = useState("#111827");
+
   const [processingImages, setProcessingImages] = useState(false);
+  const [errorFormulario, setErrorFormulario] = useState("");
 
   const totalStock = useMemo(() => {
-    return Object.values(stockMap).reduce((acc, v) => acc + (v || 0), 0);
+    return Object.values(stockMap).reduce((acc, v) => acc + clampInt(v), 0);
   }, [stockMap]);
+
+  const galleryPreview = useMemo(() => {
+    const arr = [];
+
+    if (heroUrl) {
+      arr.push({
+        id: "hero",
+        url: heroUrl,
+      });
+    }
+
+    gallery.forEach((item) => arr.push(item));
+
+    return arr;
+  }, [heroUrl, gallery]);
+
+  const canStep2 =
+    limpiarTexto(title).length >= 2 &&
+    limpiarTexto(sku).length >= 2 &&
+    Number(price) > 0;
+
+  const canStep3 = heroUrl.trim().length > 5 || gallery.length > 0;
+
+  const puedeGuardar =
+    canStep2 &&
+    canStep3 &&
+    totalStock > 0 &&
+    !saving &&
+    !processingImages;
 
   function resetForm() {
     setStep(1);
@@ -154,17 +211,8 @@ export default function NewProductModal({
     setCustomColorName("");
     setCustomColorHex("#111827");
     setProcessingImages(false);
+    setErrorFormulario("");
   }
-
-  const galleryPreview = useMemo(() => {
-    const arr = [];
-    if (heroUrl) arr.push({ id: "hero", url: heroUrl });
-    for (const g of gallery) arr.push(g);
-    return arr;
-  }, [heroUrl, gallery]);
-
-  const canStep2 = title.trim().length >= 2 && Number(price) > 0;
-  const canStep3 = heroUrl.trim().length > 5 || gallery.length > 0;
 
   useEffect(() => {
     if (open) {
@@ -172,22 +220,34 @@ export default function NewProductModal({
     }
   }, [open]);
 
+  async function procesarImagen(file) {
+    const error = validarArchivoImagen(file);
+
+    if (error) {
+      throw new Error(error);
+    }
+
+    return optimizarArchivoImagen(file, {
+      maxWidth: 1400,
+      maxHeight: 1400,
+      quality: 0.82,
+    });
+  }
+
   async function handleHeroFileChange(e) {
     const file = e.target.files?.[0];
+
     if (!file) return;
 
     setProcessingImages(true);
+    setErrorFormulario("");
 
     try {
-      const optimizada = await optimizarArchivoImagen(file, {
-        maxWidth: 1600,
-        maxHeight: 1600,
-        quality: 0.82,
-      });
-
+      const optimizada = await procesarImagen(file);
       setHeroUrl(optimizada);
     } catch (error) {
-      console.error("Error al optimizar la imagen principal:", error);
+      console.error(error);
+      setErrorFormulario(error.message || "No se pudo procesar la imagen principal.");
     } finally {
       setProcessingImages(false);
       e.target.value = "";
@@ -196,18 +256,25 @@ export default function NewProductModal({
 
   async function handleGalleryFilesChange(e) {
     const files = Array.from(e.target.files || []);
+
     if (!files.length) return;
 
+    const disponibles = Math.max(0, MAX_GALLERY_IMAGES - gallery.length);
+    const filesProcesar = files.slice(0, disponibles);
+
+    if (filesProcesar.length === 0) {
+      setErrorFormulario(`Máximo puedes agregar ${MAX_GALLERY_IMAGES} imágenes.`);
+      e.target.value = "";
+      return;
+    }
+
     setProcessingImages(true);
+    setErrorFormulario("");
 
     try {
       const newItems = await Promise.all(
-        files.map(async (file) => {
-          const optimizada = await optimizarArchivoImagen(file, {
-            maxWidth: 1600,
-            maxHeight: 1600,
-            quality: 0.82,
-          });
+        filesProcesar.map(async (file) => {
+          const optimizada = await procesarImagen(file);
 
           return {
             id: uid(),
@@ -222,8 +289,15 @@ export default function NewProductModal({
       if (!heroUrl && newItems[0]) {
         setHeroUrl(newItems[0].url);
       }
+
+      if (files.length > filesProcesar.length) {
+        setErrorFormulario(
+          `Solo se agregaron ${filesProcesar.length} imágenes. El máximo es ${MAX_GALLERY_IMAGES}.`,
+        );
+      }
     } catch (error) {
-      console.error("Error al optimizar imágenes de galería:", error);
+      console.error(error);
+      setErrorFormulario(error.message || "No se pudieron procesar las imágenes.");
     } finally {
       setProcessingImages(false);
       e.target.value = "";
@@ -250,9 +324,13 @@ export default function NewProductModal({
       if (exists) {
         setStockMap((m) => {
           const copy = { ...m };
+
           Object.keys(copy).forEach((k) => {
-            if (k.startsWith(name + "__")) delete copy[k];
+            if (k.startsWith(`${name}__`)) {
+              delete copy[k];
+            }
           });
+
           return copy;
         });
       }
@@ -269,10 +347,13 @@ export default function NewProductModal({
       if (exists) {
         setStockMap((m) => {
           const copy = { ...m };
+
           Object.keys(copy).forEach((k) => {
-            if (k.endsWith("__" + sz)) delete copy[k];
-            if (k.includes("__" + sz)) delete copy[k];
+            if (k.endsWith(`__${sz}`)) {
+              delete copy[k];
+            }
           });
+
           return copy;
         });
       }
@@ -283,7 +364,11 @@ export default function NewProductModal({
 
   function setStock(colorName, size, value) {
     const key = `${colorName}__${size}`;
-    setStockMap((prev) => ({ ...prev, [key]: clampInt(value) }));
+
+    setStockMap((prev) => ({
+      ...prev,
+      [key]: clampInt(value),
+    }));
   }
 
   function stockOf(colorName, size) {
@@ -291,29 +376,77 @@ export default function NewProductModal({
   }
 
   function addCustomColor(name, hex) {
-    const cleanName = name.trim();
-    const cleanHex = hex.trim();
+    const cleanName = limpiarTexto(name);
+    const cleanHex = limpiarTexto(hex);
+
     if (!cleanName || !cleanHex) return;
 
     setColors((prev) => {
       const exists = prev.some(
         (c) => c.name.toLowerCase() === cleanName.toLowerCase(),
       );
+
       if (exists) return prev;
+
       return [...prev, { name: cleanName, hex: cleanHex }];
     });
+
+    setSelectedColorIds((prev) => {
+      if (prev.includes(cleanName)) return prev;
+
+      return [...prev, cleanName];
+    });
+  }
+
+  function validarFormulario() {
+    if (limpiarTexto(title).length < 2) {
+      return "Captura un título válido.";
+    }
+
+    if (limpiarTexto(sku).length < 2) {
+      return "Captura un SKU válido.";
+    }
+
+    if (Number(price) <= 0) {
+      return "Captura un precio válido.";
+    }
+
+    if (!heroUrl && gallery.length === 0) {
+      return "Agrega al menos una imagen.";
+    }
+
+    if (selectedColorIds.length === 0) {
+      return "Selecciona al menos un color.";
+    }
+
+    if (selectedSizes.length === 0) {
+      return "Selecciona al menos una talla.";
+    }
+
+    if (totalStock <= 0) {
+      return "El stock total debe ser mayor a 0.";
+    }
+
+    return "";
   }
 
   async function handleSave() {
     if (saving || processingImages) return;
 
+    const error = validarFormulario();
+
+    if (error) {
+      setErrorFormulario(error);
+      return;
+    }
+
     const payload = {
-      title,
-      sku,
+      title: limpiarTexto(title),
+      sku: limpiarTexto(sku),
       price: Number(price),
       category,
       status,
-      heroUrl,
+      heroUrl: heroUrl || gallery[0]?.url || "",
       gallery,
       variants: {
         colors: selectedColorIds,
@@ -323,12 +456,19 @@ export default function NewProductModal({
       },
     };
 
-    await onSave?.(payload);
-    resetForm();
+    try {
+      setErrorFormulario("");
+      await onSave?.(payload);
+      resetForm();
+    } catch (error) {
+      console.error(error);
+      setErrorFormulario(error.message || "No se pudo guardar el producto.");
+    }
   }
 
   function resetAndClose() {
     if (saving || processingImages) return;
+
     resetForm();
     onClose?.();
   }
@@ -338,24 +478,26 @@ export default function NewProductModal({
   return (
     <div className="fixed inset-0 z-50">
       <button
+        type="button"
         className="absolute inset-0 animate-fadeIn bg-black/40"
         onClick={resetAndClose}
         aria-label="Cerrar"
       />
 
       <div className="absolute inset-0 flex items-end justify-center p-0 sm:items-center sm:p-6">
-        <div className="flex h-[100dvh] w-full flex-col overflow-hidden border bg-white shadow-2xl animate-fadeUp sm:h-auto sm:max-h-[88vh] sm:max-w-5xl sm:rounded-3xl">
+        <div className="flex h-[100vh] w-full flex-col overflow-hidden border bg-white shadow-2xl animate-fadeUp sm:h-auto sm:max-h-[88vh] sm:max-w-5xl sm:rounded-3xl">
           <div className="flex items-start justify-between gap-3 border-b px-4 py-4 sm:px-6">
             <div className="min-w-0">
               <h2 className="truncate text-lg font-semibold sm:text-xl">
                 Nuevo producto
               </h2>
               <p className="text-xs text-zinc-500 sm:text-sm">
-                Alta completa · imagen principal + carrusel · variantes con
-                stock
+                Alta completa · imagen principal + carrusel · variantes con stock
               </p>
             </div>
+
             <button
+              type="button"
               onClick={resetAndClose}
               className="inline-flex items-center justify-center rounded-xl border px-3 py-2 hover:bg-zinc-50"
               aria-label="Cerrar"
@@ -365,35 +507,53 @@ export default function NewProductModal({
           </div>
 
           <div className="flex flex-wrap gap-2 border-b px-4 py-3 sm:px-6">
-            <button onClick={() => setStep(1)}>
+            <button type="button" onClick={() => setStep(1)}>
               <StepPill active={step === 1} done={canStep2}>
                 Datos
               </StepPill>
             </button>
-            <button onClick={() => canStep2 && setStep(2)} disabled={!canStep2}>
+
+            <button
+              type="button"
+              onClick={() => canStep2 && setStep(2)}
+              disabled={!canStep2}
+            >
               <StepPill active={step === 2} done={canStep3}>
                 Imágenes
               </StepPill>
             </button>
-            <button onClick={() => canStep3 && setStep(3)} disabled={!canStep3}>
+
+            <button
+              type="button"
+              onClick={() => canStep3 && setStep(3)}
+              disabled={!canStep3}
+            >
               <StepPill active={step === 3} done={totalStock > 0}>
                 Variantes
               </StepPill>
             </button>
           </div>
 
+          {errorFormulario ? (
+            <div className="border-b bg-red-50 px-4 py-3 text-sm text-red-700 sm:px-6">
+              {errorFormulario}
+            </div>
+          ) : null}
+
+          {processingImages ? (
+            <div className="border-b bg-amber-50 px-4 py-3 text-sm text-amber-800 sm:px-6">
+              Procesando imágenes. No cierres el modal todavía.
+            </div>
+          ) : null}
+
           <div className="flex-1 overflow-auto">
             <div className="grid gap-4 px-4 py-5 sm:px-6 lg:grid-cols-[1fr_360px]">
               <div className="space-y-4">
-                {step === 1 && (
+                {step === 1 ? (
                   <section className="rounded-2xl border p-4 sm:p-5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-semibold">Datos base</div>
-                        <div className="text-xs text-zinc-500">
-                          Título, precio, SKU, categoría.
-                        </div>
-                      </div>
+                    <div className="text-sm font-semibold">Datos base</div>
+                    <div className="text-xs text-zinc-500">
+                      Título, SKU, precio, categoría y estado.
                     </div>
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -427,6 +587,8 @@ export default function NewProductModal({
                         </span>
                         <input
                           type="number"
+                          min="0"
+                          step="0.01"
                           value={price}
                           onChange={(e) => setPrice(e.target.value)}
                           className="mt-2 w-full rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
@@ -459,13 +621,14 @@ export default function NewProductModal({
                           onChange={(e) => setStatus(e.target.value)}
                           className="mt-2 w-full rounded-xl border bg-white px-3 py-2 text-sm"
                         >
-                          <option>Activo</option>
-                          <option>Inactivo</option>
+                          <option value="Activo">Activo</option>
+                          <option value="Inactivo">Inactivo</option>
                         </select>
                       </label>
 
                       <div className="mt-2 flex flex-col gap-2 sm:col-span-2 sm:flex-row">
                         <button
+                          type="button"
                           onClick={() => setStep(2)}
                           disabled={!canStep2}
                           className={[
@@ -477,7 +640,9 @@ export default function NewProductModal({
                         >
                           Continuar a imágenes
                         </button>
+
                         <button
+                          type="button"
                           onClick={resetAndClose}
                           className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
                         >
@@ -486,23 +651,16 @@ export default function NewProductModal({
                       </div>
                     </div>
                   </section>
-                )}
+                ) : null}
 
-                {step === 2 && (
+                {step === 2 ? (
                   <section className="space-y-4 rounded-2xl border p-4 sm:p-5">
                     <div>
                       <div className="text-sm font-semibold">Imágenes</div>
                       <div className="text-xs text-zinc-500">
-                        Define una <b>imagen principal</b> y agrega imágenes al{" "}
-                        <b>carrusel</b>.
+                        Define una imagen principal y agrega imágenes al carrusel.
                       </div>
                     </div>
-
-                    {processingImages ? (
-                      <div className="rounded-xl border bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                        Optimizando imágenes antes de enviarlas...
-                      </div>
-                    ) : null}
 
                     <div className="rounded-2xl border p-4">
                       <div className="flex items-center justify-between">
@@ -520,28 +678,29 @@ export default function NewProductModal({
                             type="file"
                             accept="image/*"
                             onChange={handleHeroFileChange}
-                            className="hidden"
+                            className="sr-only"
                           />
                         </label>
 
-                        {heroUrl && (
+                        {heroUrl ? (
                           <button
+                            type="button"
                             onClick={clearHero}
                             className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
                           >
                             Quitar principal
                           </button>
-                        )}
+                        ) : null}
                       </div>
                     </div>
 
                     <div className="rounded-2xl border p-4">
                       <div className="flex items-center justify-between">
                         <div className="text-sm font-semibold">
-                          Carrusel (poses)
+                          Carrusel
                         </div>
                         <span className="text-xs text-zinc-500">
-                          {gallery.length} imágenes
+                          {gallery.length}/{MAX_GALLERY_IMAGES} imágenes
                         </span>
                       </div>
 
@@ -554,7 +713,7 @@ export default function NewProductModal({
                             accept="image/*"
                             multiple
                             onChange={handleGalleryFilesChange}
-                            className="hidden"
+                            className="sr-only"
                           />
                         </label>
                       </div>
@@ -576,12 +735,15 @@ export default function NewProductModal({
 
                             <div className="mt-2 flex gap-2">
                               <button
+                                type="button"
                                 onClick={() => makeHeroFromGallery(g)}
                                 className="flex-1 rounded-xl bg-zinc-900 py-1.5 text-xs text-white hover:opacity-95"
                               >
-                                Hacer principal
+                                Principal
                               </button>
+
                               <button
+                                type="button"
                                 onClick={() => removeGallery(g.id)}
                                 className="rounded-xl border px-2 py-1.5 text-xs hover:bg-zinc-50"
                                 aria-label="Quitar"
@@ -593,21 +755,24 @@ export default function NewProductModal({
                         ))}
                       </div>
 
-                      {gallery.length === 0 && (
+                      {gallery.length === 0 ? (
                         <div className="mt-3 rounded-xl border bg-zinc-50 p-3 text-sm text-zinc-600">
                           Aún no agregas imágenes al carrusel.
                         </div>
-                      )}
+                      ) : null}
                     </div>
 
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <button
+                        type="button"
                         onClick={() => setStep(1)}
                         className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
                       >
                         Atrás
                       </button>
+
                       <button
+                        type="button"
                         onClick={() => setStep(3)}
                         disabled={!canStep3 || processingImages}
                         className={[
@@ -621,9 +786,9 @@ export default function NewProductModal({
                       </button>
                     </div>
                   </section>
-                )}
+                ) : null}
 
-                {step === 3 && (
+                {step === 3 ? (
                   <section className="space-y-4 rounded-2xl border p-4 sm:p-5">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -631,15 +796,13 @@ export default function NewProductModal({
                           Variantes + Stock
                         </div>
                         <div className="text-xs text-zinc-500">
-                          Selecciona colores y tallas. Luego asigna{" "}
-                          <b>stock por combinación</b>.
+                          Selecciona colores y tallas. Luego asigna stock por combinación.
                         </div>
                       </div>
+
                       <div className="text-right">
                         <div className="text-xs text-zinc-500">Stock total</div>
-                        <div className="text-lg font-semibold">
-                          {totalStock}
-                        </div>
+                        <div className="text-lg font-semibold">{totalStock}</div>
                       </div>
                     </div>
 
@@ -655,9 +818,11 @@ export default function NewProductModal({
                         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
                           {colors.map((c) => {
                             const active = selectedColorIds.includes(c.name);
+
                             return (
                               <button
                                 key={c.name}
+                                type="button"
                                 onClick={() => toggleColor(c.name)}
                                 className={[
                                   "flex items-center justify-between rounded-xl border px-3 py-2 text-xs",
@@ -670,7 +835,8 @@ export default function NewProductModal({
                                   <Swatch hex={c.hex} />
                                   <span className="truncate">{c.name}</span>
                                 </span>
-                                {active && <Check size={14} />}
+
+                                {active ? <Check size={14} /> : null}
                               </button>
                             );
                           })}
@@ -684,31 +850,29 @@ export default function NewProductModal({
                           <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
                             <input
                               value={customColorName}
-                              onChange={(e) =>
-                                setCustomColorName(e.target.value)
-                              }
+                              onChange={(e) => setCustomColorName(e.target.value)}
                               className="rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-zinc-900"
-                              placeholder="Nombre (ej. Lila)"
+                              placeholder="Nombre"
                             />
+
                             <input
                               type="color"
                               value={customColorHex}
-                              onChange={(e) =>
-                                setCustomColorHex(e.target.value)
-                              }
+                              onChange={(e) => setCustomColorHex(e.target.value)}
                               className="h-10 w-12 rounded-xl border bg-white"
                               aria-label="Hex"
                             />
                           </div>
 
                           <button
+                            type="button"
                             onClick={() => {
                               addCustomColor(customColorName, customColorHex);
                               setCustomColorName("");
                             }}
                             className="mt-2 w-full rounded-xl border px-3 py-2 text-sm hover:bg-white"
                           >
-                            Agregar color a la lista
+                            Agregar color
                           </button>
                         </div>
                       </div>
@@ -722,11 +886,13 @@ export default function NewProductModal({
                         </div>
 
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {sizes.map((sz) => {
+                          {DEFAULT_SIZES.map((sz) => {
                             const active = selectedSizes.includes(sz);
+
                             return (
                               <button
                                 key={sz}
+                                type="button"
                                 onClick={() => toggleSize(sz)}
                                 className={[
                                   "rounded-xl border px-3 py-2 text-xs",
@@ -742,8 +908,7 @@ export default function NewProductModal({
                         </div>
 
                         <p className="mt-3 text-[12px] text-zinc-500">
-                          Tip: si vendes “Unitalla”, puedes dejar solo esa
-                          seleccionada.
+                          Tip: si vendes Unitalla, puedes dejar solo esa seleccionada.
                         </p>
                       </div>
                     </div>
@@ -765,6 +930,7 @@ export default function NewProductModal({
                               <th className="px-4 py-3 text-left font-semibold text-zinc-700">
                                 Color
                               </th>
+
                               {selectedSizes.map((sz) => (
                                 <th
                                   key={sz}
@@ -775,21 +941,20 @@ export default function NewProductModal({
                               ))}
                             </tr>
                           </thead>
+
                           <tbody className="bg-white">
                             {selectedColorIds.map((colorName) => {
-                              const color = colors.find(
-                                (c) => c.name === colorName,
-                              );
+                              const color = colors.find((c) => c.name === colorName);
+
                               return (
                                 <tr key={colorName} className="border-t">
                                   <td className="px-4 py-3">
                                     <div className="flex items-center gap-2">
                                       <Swatch hex={color?.hex || "#111827"} />
-                                      <span className="font-medium">
-                                        {colorName}
-                                      </span>
+                                      <span className="font-medium">{colorName}</span>
                                     </div>
                                   </td>
+
                                   {selectedSizes.map((sz) => (
                                     <td key={sz} className="px-4 py-3">
                                       <input
@@ -797,11 +962,7 @@ export default function NewProductModal({
                                         min={0}
                                         value={stockOf(colorName, sz)}
                                         onChange={(e) =>
-                                          setStock(
-                                            colorName,
-                                            sz,
-                                            e.target.value,
-                                          )
+                                          setStock(colorName, sz, e.target.value)
                                         }
                                         className="w-24 rounded-xl border px-3 py-2 text-sm"
                                       />
@@ -816,27 +977,21 @@ export default function NewProductModal({
 
                       <div className="space-y-3 md:hidden">
                         {selectedColorIds.map((colorName) => {
-                          const color = colors.find(
-                            (c) => c.name === colorName,
-                          );
+                          const color = colors.find((c) => c.name === colorName);
                           const sumColor = selectedSizes.reduce(
                             (acc, sz) => acc + stockOf(colorName, sz),
                             0,
                           );
 
                           return (
-                            <div
-                              key={colorName}
-                              className="rounded-2xl border bg-white p-4"
-                            >
+                            <div key={colorName} className="rounded-2xl border bg-white p-4">
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2">
                                     <Swatch hex={color?.hex || "#111827"} />
-                                    <div className="font-semibold">
-                                      {colorName}
-                                    </div>
+                                    <div className="font-semibold">{colorName}</div>
                                   </div>
+
                                   <div className="text-xs text-zinc-500">
                                     Total color: {sumColor}
                                   </div>
@@ -845,13 +1000,11 @@ export default function NewProductModal({
 
                               <div className="mt-3 grid grid-cols-2 gap-2">
                                 {selectedSizes.map((sz) => (
-                                  <label
-                                    key={sz}
-                                    className="rounded-xl border p-3"
-                                  >
+                                  <label key={sz} className="rounded-xl border p-3">
                                     <div className="text-xs font-semibold text-zinc-700">
                                       {sz}
                                     </div>
+
                                     <input
                                       type="number"
                                       min={0}
@@ -868,38 +1021,39 @@ export default function NewProductModal({
                           );
                         })}
 
-                        {selectedColorIds.length === 0 && (
+                        {selectedColorIds.length === 0 ? (
                           <div className="rounded-xl border bg-zinc-50 p-3 text-sm text-zinc-600">
                             Selecciona al menos un color.
                           </div>
-                        )}
+                        ) : null}
                       </div>
                     </div>
 
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <button
+                        type="button"
                         onClick={() => setStep(2)}
                         className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
                       >
                         Atrás
                       </button>
+
                       <button
+                        type="button"
                         onClick={handleSave}
-                        disabled={
-                          !title.trim() || totalStock === 0 || processingImages
-                        }
+                        disabled={!puedeGuardar}
                         className={[
                           "rounded-xl px-4 py-2 text-sm",
-                          title.trim() && totalStock > 0 && !processingImages
+                          puedeGuardar
                             ? "bg-zinc-900 text-white hover:opacity-95"
                             : "cursor-not-allowed bg-zinc-200 text-zinc-500",
                         ].join(" ")}
                       >
-                        Guardar producto
+                        {saving ? "Guardando..." : "Guardar producto"}
                       </button>
                     </div>
                   </section>
-                )}
+                ) : null}
               </div>
 
               <aside className="sticky top-4 h-fit rounded-2xl border p-4 sm:p-5">
@@ -925,6 +1079,7 @@ export default function NewProductModal({
                   {galleryPreview.slice(0, 10).map((img) => (
                     <button
                       key={img.id}
+                      type="button"
                       onClick={() => setHeroUrl(img.url)}
                       className={[
                         "h-14 w-14 flex-none overflow-hidden rounded-xl border bg-zinc-100",
@@ -945,20 +1100,25 @@ export default function NewProductModal({
                   <div className="truncate font-semibold">
                     {title || "Producto"}
                   </div>
-                  <div className="text-xs text-zinc-500">SKU: {sku || "—"}</div>
+
+                  <div className="text-xs text-zinc-500">
+                    SKU: {sku || "—"}
+                  </div>
+
                   <div className="mt-2 flex items-center justify-between">
                     <span className="text-zinc-600">Precio</span>
                     <span className="font-semibold">
                       ${Number(price || 0).toLocaleString()}
                     </span>
                   </div>
+
                   <div className="mt-2 flex items-center justify-between">
                     <span className="text-zinc-600">Variantes</span>
                     <span className="font-semibold">
-                      {selectedColorIds.length} colores · {selectedSizes.length}{" "}
-                      tallas
+                      {selectedColorIds.length} colores · {selectedSizes.length} tallas
                     </span>
                   </div>
+
                   <div className="mt-2 flex items-center justify-between">
                     <span className="text-zinc-600">Stock total</span>
                     <span className="font-semibold">{totalStock}</span>
@@ -967,13 +1127,29 @@ export default function NewProductModal({
 
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   <button
+                    type="button"
                     onClick={resetAndClose}
                     className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
                   >
                     Cancelar
                   </button>
+
                   <button
-                    onClick={() => setStep((s) => Math.min(3, s + 1))}
+                    type="button"
+                    onClick={() => {
+                      if (step === 1 && !canStep2) {
+                        setErrorFormulario("Captura título, SKU y precio para continuar.");
+                        return;
+                      }
+
+                      if (step === 2 && !canStep3) {
+                        setErrorFormulario("Agrega al menos una imagen para continuar.");
+                        return;
+                      }
+
+                      setErrorFormulario("");
+                      setStep((s) => Math.min(3, s + 1));
+                    }}
                     disabled={processingImages}
                     className={[
                       "rounded-xl px-4 py-2 text-sm text-white",
@@ -992,28 +1168,31 @@ export default function NewProductModal({
           <div className="flex flex-col gap-2 border-t px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <div className="text-xs text-zinc-600">
               {category} · ${Number(price || 0).toLocaleString()} ·{" "}
-              {selectedColorIds.length} colores · {selectedSizes.length} tallas
-              · {totalStock} stock
+              {selectedColorIds.length} colores · {selectedSizes.length} tallas ·{" "}
+              {totalStock} stock
             </div>
 
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={resetAndClose}
                 className="rounded-xl border px-4 py-2 text-sm hover:bg-zinc-50"
               >
                 Cancelar
               </button>
+
               <button
+                type="button"
                 onClick={handleSave}
-                disabled={!title.trim() || totalStock === 0 || processingImages}
+                disabled={!puedeGuardar}
                 className={[
                   "rounded-xl px-4 py-2 text-sm",
-                  title.trim() && totalStock > 0 && !processingImages
+                  puedeGuardar
                     ? "bg-zinc-900 text-white hover:opacity-95"
                     : "cursor-not-allowed bg-zinc-200 text-zinc-500",
                 ].join(" ")}
               >
-                Guardar producto
+                {saving ? "Guardando..." : "Guardar producto"}
               </button>
             </div>
           </div>

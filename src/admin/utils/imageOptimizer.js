@@ -1,25 +1,61 @@
-//src/admin/utils/imageOptimizer.js
-function leerArchivoComoDataUrl(file) {
+function leerArchivoComoDataUrl(fileOrBlob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
+
     reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    reader.onerror = () =>
+      reject(reader.error || new Error("No se pudo leer la imagen."));
+
+    reader.readAsDataURL(fileOrBlob);
   });
 }
 
-function cargarImagen(src) {
+function cargarImagenConImage(src) {
   return new Promise((resolve, reject) => {
     const image = new Image();
+
     image.onload = () => resolve(image);
-    image.onerror = reject;
+    image.onerror = () =>
+      reject(new Error("El navegador no pudo cargar la imagen."));
+
     image.src = src;
   });
 }
 
+async function cargarImagen(src, file) {
+  if (typeof createImageBitmap === "function" && file) {
+    try {
+      const bitmap = await createImageBitmap(file);
+      return {
+        width: bitmap.width,
+        height: bitmap.height,
+        draw: (ctx, width, height) => {
+          ctx.drawImage(bitmap, 0, 0, width, height);
+          bitmap.close?.();
+        },
+      };
+    } catch {
+      // Algunos navegadores no soportan bien createImageBitmap para ciertos formatos.
+    }
+  }
+
+  const image = await cargarImagenConImage(src);
+
+  return {
+    width: image.naturalWidth || image.width,
+    height: image.naturalHeight || image.height,
+    draw: (ctx, width, height) => {
+      ctx.drawImage(image, 0, 0, width, height);
+    },
+  };
+}
+
 function calcularDimensiones(width, height, maxWidth, maxHeight) {
   if (!width || !height) {
-    return { width: maxWidth, height: maxHeight };
+    return {
+      width: maxWidth,
+      height: maxHeight,
+    };
   }
 
   const ratio = Math.min(1, maxWidth / width, maxHeight / height);
@@ -30,27 +66,73 @@ function calcularDimensiones(width, height, maxWidth, maxHeight) {
   };
 }
 
-function soportaWebp() {
-  try {
-    const canvas = document.createElement("canvas");
-    return canvas.toDataURL("image/webp").startsWith("data:image/webp");
-  } catch {
-    return false;
+function canvasToBlob(canvas, mimeType, quality) {
+  return new Promise((resolve) => {
+    if (!canvas.toBlob) {
+      resolve(null);
+      return;
+    }
+
+    try {
+      canvas.toBlob(
+        (blob) => {
+          resolve(blob || null);
+        },
+        mimeType,
+        quality,
+      );
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function convertirCanvasADataUrl(canvas, mimeType, quality) {
+  const blob = await canvasToBlob(canvas, mimeType, quality);
+
+  if (blob) {
+    return leerArchivoComoDataUrl(blob);
   }
+
+  try {
+    return canvas.toDataURL(mimeType, quality);
+  } catch {
+    return "";
+  }
+}
+
+function obtenerMimeSalida(file) {
+  const tipo = String(file?.type || "").toLowerCase();
+
+  if (tipo.includes("png")) {
+    return "image/png";
+  }
+
+  return "image/jpeg";
 }
 
 export async function optimizarArchivoImagen(
   file,
-  { maxWidth = 1600, maxHeight = 1600, quality = 0.82 } = {},
+  { maxWidth = 1400, maxHeight = 1400, quality = 0.82 } = {},
 ) {
+  if (!file) return "";
+
+  const tipo = String(file.type || "").toLowerCase();
+
+  if (tipo && !tipo.startsWith("image/")) {
+    throw new Error("El archivo seleccionado no es una imagen válida.");
+  }
+
   const originalDataUrl = await leerArchivoComoDataUrl(file);
+
   if (!originalDataUrl) return "";
 
   try {
-    const image = await cargarImagen(originalDataUrl);
+    const imagen = await cargarImagen(originalDataUrl, file);
+
     const { width, height } = calcularDimensiones(
-      image.naturalWidth || image.width,
-      image.naturalHeight || image.height,
+      imagen.width,
+      imagen.height,
       maxWidth,
       maxHeight,
     );
@@ -59,23 +141,37 @@ export async function optimizarArchivoImagen(
     canvas.width = width;
     canvas.height = height;
 
-    const context = canvas.getContext("2d", { alpha: true });
+    const context = canvas.getContext("2d", {
+      alpha: true,
+      willReadFrequently: false,
+    });
+
     if (!context) {
       return originalDataUrl;
     }
 
-    context.drawImage(image, 0, 0, width, height);
+    const mimeType = obtenerMimeSalida(file);
 
-    const mimeType = soportaWebp() ? "image/webp" : "image/jpeg";
-    const optimizada = canvas.toDataURL(mimeType, quality);
+    if (mimeType === "image/jpeg") {
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, height);
+    }
 
-    if (!optimizada || optimizada.length >= originalDataUrl.length) {
+    imagen.draw(context, width, height);
+
+    const optimizada = await convertirCanvasADataUrl(canvas, mimeType, quality);
+
+    if (!optimizada) {
+      return originalDataUrl;
+    }
+
+    if (optimizada.length >= originalDataUrl.length) {
       return originalDataUrl;
     }
 
     return optimizada;
   } catch (error) {
-    console.error("No se pudo optimizar la imagen en el navegador:", error);
+    console.error("No se pudo optimizar la imagen en este navegador:", error);
     return originalDataUrl;
   }
 }

@@ -36,6 +36,7 @@ function buildSearchText(item) {
   return normalizeText(
     [
       item?.name,
+      item?.label,
       item?.slug,
       item?.href,
       item?.categoriaApi,
@@ -47,9 +48,7 @@ function buildSearchText(item) {
 }
 
 function formatMoney(value) {
-  const number = Number(value || 0);
-
-  return number.toLocaleString("es-MX", {
+  return Number(value || 0).toLocaleString("es-MX", {
     style: "currency",
     currency: "MXN",
   });
@@ -66,11 +65,89 @@ function getProductImage(producto) {
 }
 
 function getProductTitle(producto) {
-  return producto?.titulo || producto?.name || "Producto";
+  return producto?.titulo || producto?.name || producto?.title || "Producto";
 }
 
-function getProductHref(producto) {
-  return `/producto/${producto.id}`;
+function getProductCategory(producto) {
+  return producto?.categoria || producto?.category || producto?.raw?.categoria || "";
+}
+
+function getProductHref(producto, catalogItems = []) {
+  const productId = producto?.id;
+  if (!productId) return "/";
+
+  const categoriaProducto = normalizeText(getProductCategory(producto));
+
+  const categoriaEncontrada = catalogItems.find((item) => {
+    const valores = [
+      item?.name,
+      item?.label,
+      item?.slug,
+      item?.categoriaApi,
+      ...(Array.isArray(item?.aliases) ? item.aliases : []),
+    ];
+
+    return valores.some((valor) => normalizeText(valor) === categoriaProducto);
+  });
+
+  const basePath = categoriaEncontrada?.href || "/";
+
+  try {
+    const url = new URL(basePath, window.location.origin);
+    url.searchParams.set("producto", String(productId));
+
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return `/?producto=${encodeURIComponent(String(productId))}`;
+  }
+}
+
+function CategoryMenuCard({ item, onClick }) {
+  return (
+    <Link
+      to={item.to}
+      onClick={onClick}
+      className="group relative block min-h-[76px] overflow-hidden rounded-2xl border border-black/10 bg-[#f3f3f3] transition hover:bg-[#eeeeee] xl:min-h-[82px]"
+    >
+      <div className="absolute inset-0 bg-gradient-to-r from-[#f3f3f3] via-[#f3f3f3] via-55% to-transparent" />
+
+      <div className="relative z-10 flex h-full items-center px-4 py-4">
+        <span className="max-w-[58%] text-[13px] font-extrabold uppercase tracking-tight text-black sm:text-sm xl:text-[15px]">
+          {item.label}
+        </span>
+      </div>
+
+      {item.image ? (
+        <div className="pointer-events-none absolute inset-y-0 right-0 flex w-[84px] items-end justify-end xl:w-[96px]">
+          <img
+            src={item.image}
+            alt={item.label}
+            className="h-full w-full object-contain object-right-bottom transition duration-300 group-hover:scale-[1.04]"
+            loading="lazy"
+            decoding="async"
+            draggable="false"
+          />
+        </div>
+      ) : null}
+    </Link>
+  );
+}
+
+function CategoryMobileLink({ item, onClick }) {
+  return (
+    <Link
+      to={item.to}
+      onClick={onClick}
+      className="group flex items-center justify-between rounded-2xl border border-black/10 bg-white px-4 py-3.5 text-sm text-black transition hover:bg-gray-50"
+    >
+      <span className="font-semibold tracking-tight">{item.label}</span>
+
+      <ArrowUpRight
+        className="h-4 w-4 text-black/45 transition group-hover:text-black"
+        strokeWidth={2}
+      />
+    </Link>
+  );
 }
 
 function SearchModal({ open, onClose, items = [] }) {
@@ -126,12 +203,12 @@ function SearchModal({ open, onClose, items = [] }) {
     document.addEventListener("keydown", onKeyDown);
     document.body.style.overflow = "hidden";
 
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       inputRef.current?.focus();
     }, 30);
 
     return () => {
-      clearTimeout(timer);
+      window.clearTimeout(timer);
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = "";
     };
@@ -159,7 +236,7 @@ function SearchModal({ open, onClose, items = [] }) {
     const controller = new AbortController();
     let activo = true;
 
-    const timer = setTimeout(async () => {
+    const timer = window.setTimeout(async () => {
       try {
         setBuscando(true);
         setError("");
@@ -190,7 +267,7 @@ function SearchModal({ open, onClose, items = [] }) {
     return () => {
       activo = false;
       controller.abort();
-      clearTimeout(timer);
+      window.clearTimeout(timer);
     };
   }, [open, terminosBusqueda]);
 
@@ -201,7 +278,7 @@ function SearchModal({ open, onClose, items = [] }) {
 
     if (productos.length > 0) {
       onClose?.();
-      nav(getProductHref(productos[0]));
+      nav(getProductHref(productos[0], items));
       return;
     }
 
@@ -211,14 +288,14 @@ function SearchModal({ open, onClose, items = [] }) {
     }
   };
 
+  const handlePickProduct = (producto) => {
+    onClose?.();
+    nav(getProductHref(producto, items));
+  };
+
   const handlePickCategory = (item) => {
     onClose?.();
     nav(item.href);
-  };
-
-  const handlePickProduct = (producto) => {
-    onClose?.();
-    nav(getProductHref(producto));
   };
 
   if (!open) return null;
@@ -239,7 +316,6 @@ function SearchModal({ open, onClose, items = [] }) {
               <h3 className="text-lg font-extrabold tracking-tight text-black sm:text-xl">
                 Buscar prendas
               </h3>
-
               <p className="mt-1 text-sm text-black/55">
                 Busca por nombre, categoría, SKU o código.
               </p>
@@ -353,7 +429,7 @@ function SearchModal({ open, onClose, items = [] }) {
                                   </h4>
 
                                   <p className="mt-1 truncate text-xs text-black/50 sm:text-sm">
-                                    {producto.categoria || "Sin categoría"}
+                                    {getProductCategory(producto) || "Sin categoría"}
                                   </p>
 
                                   <p className="mt-1 text-sm font-bold text-black">
@@ -363,10 +439,7 @@ function SearchModal({ open, onClose, items = [] }) {
                               </div>
 
                               <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-black">
-                                <ArrowUpRight
-                                  className="h-4 w-4"
-                                  strokeWidth={2}
-                                />
+                                <ArrowUpRight className="h-4 w-4" strokeWidth={2} />
                               </span>
                             </button>
                           );
@@ -400,10 +473,7 @@ function SearchModal({ open, onClose, items = [] }) {
                             </div>
 
                             <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white text-black">
-                              <ArrowUpRight
-                                className="h-4 w-4"
-                                strokeWidth={2}
-                              />
+                              <ArrowUpRight className="h-4 w-4" strokeWidth={2} />
                             </span>
                           </button>
                         ))}
@@ -418,7 +488,6 @@ function SearchModal({ open, onClose, items = [] }) {
                       <p className="text-base font-semibold text-black">
                         No encontramos resultados
                       </p>
-
                       <p className="mt-2 text-sm text-black/55">
                         Intenta con palabras como sets, conjuntos, blusas,
                         vestidos, pantalones, shorts o faldas.
@@ -432,54 +501,6 @@ function SearchModal({ open, onClose, items = [] }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function CategoryMenuCard({ item, onClick }) {
-  return (
-    <Link
-      to={item.to}
-      onClick={onClick}
-      className="group relative block min-h-[76px] overflow-hidden rounded-2xl border border-black/10 bg-[#f3f3f3] transition hover:bg-[#eeeeee] xl:min-h-[82px]"
-    >
-      <div className="absolute inset-0 bg-gradient-to-r from-[#f3f3f3] via-[#f3f3f3] via-55% to-transparent" />
-
-      <div className="relative z-10 flex h-full items-center px-4 py-4">
-        <span className="max-w-[58%] text-[13px] font-extrabold uppercase tracking-tight text-black sm:text-sm xl:text-[15px]">
-          {item.label}
-        </span>
-      </div>
-
-      {item.image ? (
-        <div className="pointer-events-none absolute inset-y-0 right-0 flex w-[84px] items-end justify-end xl:w-[96px]">
-          <img
-            src={item.image}
-            alt={item.label}
-            className="h-full w-full object-contain object-right-bottom transition duration-300 group-hover:scale-[1.04]"
-            loading="lazy"
-            decoding="async"
-            draggable="false"
-          />
-        </div>
-      ) : null}
-    </Link>
-  );
-}
-
-function CategoryMobileLink({ item, onClick }) {
-  return (
-    <Link
-      to={item.to}
-      onClick={onClick}
-      className="group flex items-center justify-between rounded-2xl border border-black/10 bg-white px-4 py-3.5 text-sm text-black transition hover:bg-gray-50"
-    >
-      <span className="font-semibold tracking-tight">{item.label}</span>
-
-      <ArrowUpRight
-        className="h-4 w-4 text-black/45 transition group-hover:text-black"
-        strokeWidth={2}
-      />
-    </Link>
   );
 }
 
@@ -547,6 +568,17 @@ export default function Header({ onCartClick }) {
 
   const [searchOpen, setSearchOpen] = useState(false);
 
+  const newArrivals = topLinks.find((x) => x.label === "NEW ARRIVALS");
+  const rebajas = topLinks.find((x) => x.label === "REBAJAS");
+
+  const displayName =
+    clienteUser?.nombre || clienteUser?.email?.split("@")?.[0] || "Mi cuenta";
+
+  const headerIconBtnClass =
+    "flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white transition hover:border-white/40 hover:bg-white/10";
+
+  const headerIconClass = "h-5 w-5";
+
   useEffect(() => {
     const onKeyDown = (e) => {
       if (e.key === "Escape") {
@@ -604,17 +636,6 @@ export default function Header({ onCartClick }) {
     window.addEventListener("mousedown", onDown);
     return () => window.removeEventListener("mousedown", onDown);
   }, [accountOpenDesktop]);
-
-  const newArrivals = topLinks.find((x) => x.label === "NEW ARRIVALS");
-  const rebajas = topLinks.find((x) => x.label === "REBAJAS");
-
-  const displayName =
-    clienteUser?.nombre || clienteUser?.email?.split("@")?.[0] || "Mi cuenta";
-
-  const headerIconBtnClass =
-    "flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-white/5 text-white transition hover:border-white/40 hover:bg-white/10";
-
-  const headerIconClass = "h-5 w-5";
 
   const handleAccountClickMobile = () => {
     if (!clienteUser) {
@@ -787,7 +808,6 @@ export default function Header({ onCartClick }) {
                   aria-haspopup="menu"
                 >
                   CATALOGO
-
                   {catalogOpenDesktop ? (
                     <ChevronUp className="h-4 w-4" strokeWidth={2} />
                   ) : (
@@ -806,7 +826,6 @@ export default function Header({ onCartClick }) {
                           <div className="text-xs font-bold tracking-[0.14em] text-gray-500">
                             CATEGORÍAS
                           </div>
-
                           <p className="mt-1 text-sm text-gray-500">
                             Explora todas las colecciones
                           </p>
@@ -941,27 +960,37 @@ export default function Header({ onCartClick }) {
           <div className="fixed inset-0 z-[60] lg:hidden">
             <button
               type="button"
-              className="absolute inset-0 bg-black/40"
-              onClick={() => setMenuOpen(false)}
               aria-label="Cerrar menú"
+              onClick={() => setMenuOpen(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             />
 
-            <aside className="absolute left-0 top-0 h-full w-[86vw] max-w-[360px] overflow-y-auto border-r bg-white shadow-2xl">
-              <div className="flex h-16 items-center justify-between border-b px-4">
-                <div className="font-extrabold tracking-wide">MENÚ</div>
+            <aside className="absolute left-0 top-0 h-full w-[min(88vw,380px)] overflow-y-auto bg-white p-4 text-black shadow-2xl">
+              <div className="mb-5 flex items-center justify-between">
+                <Link
+                  to="/"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center"
+                >
+                  <img
+                    src={logo}
+                    alt="Logo Boutique"
+                    className="h-14 w-auto max-w-[190px] object-contain"
+                    draggable="false"
+                  />
+                </Link>
 
                 <button
                   type="button"
                   onClick={() => setMenuOpen(false)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border transition hover:bg-gray-50"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-black/10 transition hover:bg-gray-50"
                   aria-label="Cerrar menú"
-                  title="Cerrar"
                 >
                   <X className="h-5 w-5" strokeWidth={2} />
                 </button>
               </div>
 
-              <nav className="p-4">
+              <nav>
                 {newArrivals ? (
                   <Link
                     to={newArrivals.to}
