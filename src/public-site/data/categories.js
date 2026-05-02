@@ -19,7 +19,7 @@ export const categories = [
     categoriaApi: "Sets",
     aliases: ["conjuntos", "conjunto", "set", "coordinados", "coordinado"],
     image: conjuntosImg,
-    href: "/catalogo/conjuntos",
+    href: "/catalogo/sets",
   },
   {
     id: 2,

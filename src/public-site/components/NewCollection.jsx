@@ -18,6 +18,7 @@ import {
   adaptarProductoBackend,
   adaptarProductoListadoBackend,
 } from "../lib/productAdapters";
+import { categories } from "../data/categories";
 import ProductGrid from "./ProductGrid";
 
 const loadProductModal = () => import("./ProductModal");
@@ -72,6 +73,54 @@ function ejecutarDespuesDePintar(fn) {
 
 function esNavegador() {
   return typeof window !== "undefined";
+}
+
+function normalizarTexto(valor) {
+  return String(valor || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function obtenerUltimoSegmentoRuta(valor) {
+  const limpio = String(valor || "")
+    .split("?")[0]
+    .split("#")[0]
+    .replace(/\/+$/, "");
+
+  const partes = limpio.split("/").filter(Boolean);
+  return partes[partes.length - 1] || limpio;
+}
+
+function obtenerValoresCategoria(item) {
+  return [
+    item?.name,
+    item?.slug,
+    item?.categoriaApi,
+    item?.href,
+    obtenerUltimoSegmentoRuta(item?.href),
+    ...(Array.isArray(item?.aliases) ? item.aliases : []),
+  ].filter(Boolean);
+}
+
+function resolverCategoriaPublica(...valoresBusqueda) {
+  const busquedas = valoresBusqueda
+    .flatMap((valor) => [valor, obtenerUltimoSegmentoRuta(valor)])
+    .map(normalizarTexto)
+    .filter(Boolean);
+
+  if (busquedas.length === 0) return null;
+
+  return (
+    categories.find((item) => {
+      const valoresCategoria = obtenerValoresCategoria(item).map(normalizarTexto);
+
+      return busquedas.some((busqueda) =>
+        valoresCategoria.some((valorCategoria) => valorCategoria === busqueda),
+      );
+    }) || null
+  );
 }
 
 function leerProductoIdDesdeUrl() {
@@ -161,14 +210,40 @@ export default function NewCollection({
 
   const detalleAbortRef = useRef(null);
 
+  const categoriaResuelta = useMemo(() => {
+    return resolverCategoriaPublica(categoria, categoriaKey);
+  }, [categoria, categoriaKey]);
+
+  const categoriaApi = useMemo(() => {
+    if (!categoria && !categoriaKey) return "";
+
+    return (
+      categoriaResuelta?.categoriaApi ||
+      categoriaResuelta?.name ||
+      categoria ||
+      categoriaKey ||
+      ""
+    );
+  }, [categoria, categoriaKey, categoriaResuelta]);
+
+  const categoriaTitulo = useMemo(() => {
+    if (!categoriaApi) return "Nueva colección";
+
+    return categoriaResuelta?.name || categoriaApi;
+  }, [categoriaApi, categoriaResuelta]);
+
+  const categoriaKeyReal = useMemo(() => {
+    return categoriaResuelta?.slug || categoriaApi || categoriaKey || categoria || "";
+  }, [categoriaResuelta, categoriaApi, categoriaKey, categoria]);
+
   const params = useMemo(
     () => ({
-      ...(categoria ? { categoria } : {}),
+      ...(categoriaApi ? { categoria: categoriaApi } : {}),
       solo_disponibles: true,
       page: 1,
       page_size: PAGE_SIZE,
     }),
-    [categoria],
+    [categoriaApi],
   );
 
   useEffect(() => {
@@ -181,7 +256,7 @@ export default function NewCollection({
     setSelected(null);
     setCargandoDetalle(false);
     setErrorDetalle("");
-  }, [categoriaKey, categoria]);
+  }, [categoriaKeyReal]);
 
   useEffect(() => {
     let activo = true;
@@ -197,6 +272,7 @@ export default function NewCollection({
       setCargando(false);
       setError("");
     } else {
+      setItems([]);
       setCargando(true);
       setError("");
     }
@@ -218,6 +294,7 @@ export default function NewCollection({
         setError("");
       } catch (err) {
         if (!activo || err?.name === "AbortError") return;
+        setItems([]);
         setError(err.message || "No se pudieron cargar los productos");
       } finally {
         if (activo) {
@@ -258,15 +335,10 @@ export default function NewCollection({
     return cancelar;
   }, [items]);
 
-  const titulo = useMemo(() => {
-    if (!categoria) return "Nueva colección";
-    return categoria;
-  }, [categoria]);
-
   const subtitulo = useMemo(() => {
-    if (!categoria) return "Explora piezas seleccionadas para ti.";
+    if (!categoriaApi) return "Explora piezas seleccionadas para ti.";
     return "Descubre piezas disponibles en esta categoría.";
-  }, [categoria]);
+  }, [categoriaApi]);
 
   const cargarDetalleProducto = useCallback((productoBase) => {
     if (!productoBase?.id) return;
@@ -346,7 +418,9 @@ export default function NewCollection({
       (item) => String(item?.id) === String(productId),
     );
 
-    cargarDetalleProducto(productoEnListado || construirProductoTemporal(productId));
+    cargarDetalleProducto(
+      productoEnListado || construirProductoTemporal(productId),
+    );
   }, [cargarDetalleProducto, items, open, selected?.id]);
 
   useEffect(() => {
@@ -451,7 +525,7 @@ export default function NewCollection({
         onOpen={handleOpen}
         onPrefetch={handlePrefetch}
         onShare={handleShare}
-        title={titulo}
+        title={categoriaTitulo}
         subtitle={subtitulo}
       />
 
